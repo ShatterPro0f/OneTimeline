@@ -703,7 +703,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": [],
+   "links": [
+    {
+     "platform": "disney",
+     "id": "cad91b86-ab50-4fce-882f-ae71c86c2938"
+    }
+   ],
    "kind": "movie",
    "category": "one-shot"
   },
@@ -749,7 +754,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": [],
+   "links": [
+    {
+     "platform": "disney",
+     "id": "2cd46937-17fe-4ada-8de4-0972f2763f1c"
+    }
+   ],
    "kind": "movie",
    "category": "one-shot"
   },
@@ -12564,7 +12574,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "f63874ef-939f-4a16-8fc0-043f3169f664"
+    }
+   ]
   },
   {
    "order": 531,
@@ -12583,7 +12598,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "7c493ed1-dbad-459d-af98-d22c0b451b91"
+    }
+   ]
   },
   {
    "order": 532,
@@ -12602,7 +12622,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "795b7ae0-9be8-4ee4-b1ca-75f79d8ac9c3"
+    }
+   ]
   },
   {
    "order": 533,
@@ -12621,7 +12646,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "451ea205-69c0-4b98-8b9e-6fe5b642da6e"
+    }
+   ]
   },
   {
    "order": 534,
@@ -12640,7 +12670,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "b7ecd795-63a6-4187-9dc5-922deb547f0c"
+    }
+   ]
   },
   {
    "order": 535,
@@ -12659,7 +12694,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "2367a734-17ef-49f3-8746-669555919676"
+    }
+   ]
   },
   {
    "order": 536,
@@ -12678,7 +12718,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "2d0f927a-c3fb-450d-9bad-697fae776482"
+    }
+   ]
   },
   {
    "order": 537,
@@ -12697,7 +12742,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": []
+   "links": [
+    {
+     "platform": "disney",
+     "id": "4cce852c-183e-4155-993c-ff2669c11f74"
+    }
+   ]
   },
   {
    "order": 538,
@@ -12908,7 +12958,12 @@
    "eventIndex": null,
    "eventTotal": null,
    "eventGroup": null,
-   "links": [],
+   "links": [
+    {
+     "platform": "disney",
+     "id": "c5b69f75-f159-4749-873d-9a1d1a4eb878"
+    }
+   ],
    "kind": "movie",
    "category": "special"
   },

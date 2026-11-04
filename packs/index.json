@@ -24,8 +24,8 @@
       "showsLine": "Every film and live-action series — the Avengers, the Defenders, Agents of S.H.I.E.L.D. and the Disney+ originals — plus Special Presentations, One-Shots and web shorts",
       "episodeCount": 555,
       "file": "episodes-mcu.json",
-      "sha256": "9683e7b022fabce3998c0a534830550f8d97d22e6be46729bca5b3e278c3da14",
-      "dataVersion": 1
+      "sha256": "0816a8d0f1e68c52c5f852109fa8e9553d0a52904f35f2b69fe5c162099119cc",
+      "dataVersion": 2
     }
   ]
 }
