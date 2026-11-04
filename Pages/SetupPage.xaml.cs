@@ -5,24 +5,25 @@ namespace OneChicago.Pages;
 
 /// <summary>
 /// First-run setup (production Decision 7) — also re-runnable from
-/// Settings via "Run setup again". Three optional steps on one clean
+/// Settings via "Run setup again". Four optional steps on one clean
 /// page:
 ///
-///  1. Starting point. Nobody is silently seeded: a fresh install
+///  1. Universes (Decision 1C). Which packs to include — the rows
+///     are UniverseSection's, shared with Settings. This comes
+///     first because the starting point below is per-universe: it
+///     speaks for whichever universe is active.
+///  2. Starting point. Nobody is silently seeded: a fresh install
 ///     starts unwatched, and this step asks whether the user has
 ///     already watched some of the shows and lets them pick the
 ///     first unwatched episode (everything before it is marked
 ///     watched — the same StartFromHere the episode pages use).
-///  2. TV connection. Find My TV / manual entry + Check connection,
+///  3. TV connection. Find My TV / manual entry + Check connection,
 ///     the same pieces Settings uses (RokuFinder, the Store's
 ///     address validation, RokuClient's device summary).
-///  3. Prime Video links. The launch universe ships with its
+///  4. Prime Video links. The launch universe ships with its
 ///     links (Decision 1 as amended); this step explains how a
-///     user can replace a single episode's link with their own,
-///     and carries the shared Episode links section (the same
-///     control Settings hosts) for loading an additional
-///     episode-links file — a future universe's, or the user's
-///     own — fetched only on their tap.
+///     user can replace a single episode's link with their own
+///     on that episode's page.
 ///
 /// Done and Skip both mark setup completed (Store.SetupCompleted),
 /// so it is never auto-offered again; backing out without either
@@ -41,9 +42,19 @@ public partial class SetupPage : ContentPage
 		base.OnAppearing();
 		await AppHost.Ready;
 		IpEntry.Text = AppHost.Store.TvIp;
-		LinksSection.Refresh();
 		RefreshStartingStatus();
 		BuildStartingResults();
+		// The universe rows (shared with Settings — UniverseSection).
+		// A toggle can change which universe is active, and the
+		// starting-point step below speaks for the active universe:
+		// refresh its status and clear any search results (they were
+		// the old universe's episodes) whenever the selection moves.
+		await UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, () =>
+		{
+			StartingSearchEntry.Text = "";
+			BuildStartingResults();
+			RefreshStartingStatus();
+		});
 	}
 
 	// ---- Starting point ----------------------------------------------

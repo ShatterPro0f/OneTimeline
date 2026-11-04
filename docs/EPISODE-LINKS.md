@@ -7,43 +7,23 @@ To play an episode, One Timeline needs that episode's **Prime Video link** — s
 In order of precedence:
 
 1. **Your link for an episode** — pasted on the episode's own page ("Your Prime Video link"). Always wins.
-2. **A links file you load** — one file covering many episodes, loaded through the Episode links field (below).
-3. **The universe's built-in links** — the One Chicago universe ships with its links included.
+2. **The universe pack's built-in links** — every universe ships with its links included in the pack itself. The One Chicago pack includes links for **827 of its 846** episodes; the episodes without one (all of *Chicago Justice*, and the handful most recently aired) simply have no Play button.
 
-## Loading a links file
+Nothing is fetched or loaded from the network: links live in the pack, and your own links live on your device. Loading a links file from an address was an earlier design and has been removed.
 
-1. Host the file anywhere the phone can reach over http or https (a GitHub raw link works well).
-2. In the app: **Settings → Episode links** (or the same step during setup).
-3. Paste the file's address and tap **Fetch**. The app downloads the file, validates the whole thing, and only then applies it — a bad file changes nothing and tells you why.
-4. The status line reports how many episode links loaded. **Clear** removes the loaded file at any time.
+## Fixing or adding a link
 
-Links you load are stored **on your device only**. They are not included in progress exports, and importing a progress file never touches them.
+1. In the Prime Video app or website, open the episode and use **Share → Copy link**.
+2. In One Timeline, open the episode's page and find **Your Prime Video link**.
+3. Paste the full link (or the bare `amzn1.dv.gti.…` ID) and save. The app extracts and validates the ID before storing it.
+4. Your link takes over immediately. **Remove** on the same page deletes it and restores the pack's built-in link.
 
-## File format
+Your links are stored **on your device only**, per episode, and travel with that universe's progress exports.
 
-```json
-{
-  "credit": "Optional — credit for whoever compiled the file. The app ignores this field.",
-  "format": "onetimeline-prime-links",
-  "version": 1,
-  "universe": "one-chicago",
-  "links": {
-    "Fire|1|1": "amzn1.dv.gti.f6ba256c-0cf8-ca90-11ab-c5f9de93c029"
-  }
-}
-```
+## Where the built-in links came from
 
-Rules the app enforces:
+Chicago's links were matched episode-by-episode against Prime Video Canada via JustWatch, and every one was verified unique. The full account — sources, method, and terms position — is in [ONE-CHICAGO-SOURCES.md](ONE-CHICAGO-SOURCES.md) (§3). The identical list is kept in this repository as [onetimeline-prime-links.json](../onetimeline-prime-links.json), with the spreadsheet credit at its top, so anyone can audit exactly which ID belongs to which episode.
 
-- `format` must be `onetimeline-prime-links`, and `universe` must match the universe the app is running.
-- Each key is an **episode key**: `Show|Season|Episode` (for example `Fire|1|1`, `PD|3|8`, `Med|1|2`). Keys for episodes the app doesn't know are ignored, and reported as ignored in the fetch result.
-- Each value may be a bare content ID (`amzn1.dv.gti.…`) **or a full Prime Video link** — the app extracts the ID the same way it does for links pasted on an episode page. Values that don't resolve to a valid ID are ignored and counted.
-- A file that yields **zero** usable links is refused.
-- Downloads are capped at **2 MB**.
-- Extra top-level fields (like `credit`) are ignored, so files can carry their own notes and credits.
+## If you're authoring a universe
 
-This repository's own Chicago file — [onetimeline-prime-links.json](../onetimeline-prime-links.json) — is a working example, credit included.
-
-## Making your own file
-
-From the Prime Video app or website, open an episode and use **Share → Copy link**; the link contains the episode's content ID. Collect one entry per episode under its key, following the format above. A "Raw" view of a file hosted on GitHub gives you exactly the kind of address the Fetch field wants.
+Links are part of the universe file itself (the optional `primeContentId` field on each episode). The authoring instructions — including the rule that a universe's sources must be documented before it can be added to the release — are in [CREATING-A-UNIVERSE.md](CREATING-A-UNIVERSE.md).

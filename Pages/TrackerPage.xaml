@@ -20,6 +20,11 @@
                 <!-- Overall watch-through progress (iteration 7): one thin
                      bar under the count line — no card, nothing else. -->
                 <ProgressBar x:Name="OverallProgress" ProgressColor="{DynamicResource ThAccent}" BackgroundColor="{DynamicResource ThProgressTrack}" Margin="0,0,0,18" />
+                <!-- Universe switcher (Decision 1C): built in code, and
+                     ONLY when more than one universe is included. With
+                     exactly one it stays empty and invisible and this
+                     header is exactly what it was before universes. -->
+                <HorizontalStackLayout x:Name="UniverseSwitcher" Spacing="8" IsVisible="False" />
 
                 <!-- Auto check-off notice -->
                 <Border x:Name="AutoCheckBanner" BackgroundColor="{DynamicResource ThBannerBg}" StrokeThickness="0" Padding="14,10" Margin="0,0,0,14" IsVisible="False">

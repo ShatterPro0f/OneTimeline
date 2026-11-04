@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:pages="clr-namespace:OneChicago.Pages"
              x:Class="OneChicago.Pages.SettingsPage"
              Title="Settings"
              BackgroundColor="{DynamicResource ThPageBg}">
@@ -61,8 +60,12 @@
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="Revisit the first-run setup: your starting point in the watch order, the TV connection, and how Prime Video links work. (Short version: open an episode in Prime Video, tap Share → Copy link, then paste it on that episode's page here — under “Your Prime Video link”.)" />
 
-            <!-- EPISODE LINKS SOURCE (shared with Setup) -->
-            <pages:SourcesSection x:Name="LinksSection" />
+            <!-- UNIVERSES -->
+            <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="The universes included in your app — the same choice setup offered. Each universe keeps its own watch order and progress. Turning one off never deletes its progress: turn it back on and everything is where you left it." />
+            <VerticalStackLayout x:Name="UniverseList" Spacing="0" />
+            <Label x:Name="UniverseNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
 
             <!-- AUTOPLAY -->
             <Label Text="AUTOPLAY" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />

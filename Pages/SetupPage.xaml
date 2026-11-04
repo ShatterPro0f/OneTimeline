@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:pages="clr-namespace:OneChicago.Pages"
              x:Class="OneChicago.Pages.SetupPage"
              Title="Set up"
              BackgroundColor="{DynamicResource ThPageBg}">
@@ -12,8 +11,15 @@
             <Label FontSize="15" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
                    Text="A minute of setup — every step is optional, and everything here can be changed later in Settings." />
 
+            <!-- UNIVERSES -->
+            <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,2" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="One Timeline tracks interwoven shows universe by universe. Choose which universes to include — you can change this any time in Settings. Each universe keeps its own watch order and its own progress." />
+            <VerticalStackLayout x:Name="UniverseList" Spacing="0" Margin="0,4,0,0" />
+            <Label x:Name="UniverseNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
+
             <!-- STARTING POINT -->
-            <Label Text="WHERE ARE YOU UP TO?" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,2" />
+            <Label Text="WHERE ARE YOU UP TO?" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
             <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
                    Text="New to the shows? Start from the beginning. Already partway through? Pick the first episode you haven't watched — everything before it gets marked watched. Nothing is final: any episode can be re-marked from its page at any time." />
             <Button x:Name="BeginningButton" Text="Start from the beginning" Clicked="OnStartFromBeginning"
@@ -54,9 +60,6 @@
             <Label Text="PRIME VIDEO LINKS (OPTIONAL)" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
             <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
                    Text="The One Chicago episodes come with their Prime Video links included, so Play works out of the box. You can still replace any single episode's link with your own: open the episode in the Prime Video app (or at primevideo.com), tap Share, then Copy link. Then open that episode in this app and paste the link under “Your Prime Video link”. Only the episode ID from your link is kept, and it never leaves this phone." />
-
-            <!-- EPISODE LINKS SOURCE (shared with Settings) -->
-            <pages:SourcesSection x:Name="LinksSection" />
 
             <!-- FINISH -->
             <Button x:Name="DoneButton" Text="Done" Clicked="OnDone"

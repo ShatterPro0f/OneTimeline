@@ -10,11 +10,11 @@
 
 The setup flow is skippable at every step, and everything in it can be changed later in Settings.
 
-1. **Starting point** — if you've already watched some of the universe, pick where you are and everything before it is marked watched. Nothing is pre-marked for you.
-2. **Connect your TV (optional)** — tap **Find My TV** to discover a Roku TV on your home network, or enter its local IP address by hand and tap **Check connection**.
+1. **Universes** — choose which universes to include. One Chicago is included by default; as more universes are added they'll appear here, each with its own separate progress. The same list lives in Settings, so you can change your mind any time. At least one universe must stay included.
+2. **Starting point** — if you've already watched some of the universe, pick where you are and everything before it is marked watched. Nothing is pre-marked for you.
+3. **Connect your TV (optional)** — tap **Find My TV** to discover a Roku TV on your home network, or enter its local IP address by hand and tap **Check connection**.
    - The TV and the phone must be on the **same network**.
    - On the TV: *Settings → System → Advanced system settings → Control by mobile apps* must be **Enabled**.
-3. **Episode links** — the One Chicago universe includes its links, so there's nothing to do for Chicago. This step matters for other universes and custom links files; see [EPISODE-LINKS.md](EPISODE-LINKS.md).
 
 ## Playing an episode
 
@@ -32,5 +32,5 @@ With **Background Watching** on in Settings, the app runs a small always-on noti
 ## Troubleshooting
 
 - **TV not found** — check both devices are on the same Wi-Fi, and that *Control by mobile apps* is enabled on the TV. A guest network or a router with client isolation will block discovery; entering the TV's IP address manually still works in that case if the network allows the connection.
-- **Play opens the wrong episode page** — the episode's link can be corrected by hand: open the episode, and under **Your Prime Video link**, paste the right link from the Prime Video app (Share → Copy link). Your link always wins over any built-in or loaded one.
+- **Play opens the wrong episode page** — the episode's link can be corrected by hand: open the episode, and under **Your Prime Video link**, paste the right link from the Prime Video app (Share → Copy link). Your link always wins over the built-in one.
 - **Background switching stopped** — re-check the battery setting above; some manufacturers' battery savers stop background services until the app is opened again.

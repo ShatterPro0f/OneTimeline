@@ -4,7 +4,7 @@
 
 One Timeline is a free Android app for watching interwoven TV series the way they were meant to be watched: in **one chronological watch order** that runs across every show in a shared universe — so you always know the single correct next episode, and the app can start it playing on your TV for you.
 
-The first universe included is **One Chicago** — *Chicago Fire*, *Chicago P.D.*, *Chicago Med*, with *Chicago Justice*, *FBI*, and *Law & Order: SVU* crossover appearances — 846 episodes in one order. Other universes (the Arrowverse is planned) will arrive as additional packs.
+The first universe included is **One Chicago** — *Chicago Fire*, *Chicago P.D.*, *Chicago Med*, with *Chicago Justice*, *FBI*, and *Law & Order: SVU* crossover appearances — 846 episodes in one order. Other universes (the Arrowverse is planned) will arrive as additional packs — during setup you choose which universes to include, and you can change that any time in Settings. You can also [create your own universe](docs/CREATING-A-UNIVERSE.md).
 
 ## What it does
 
@@ -26,7 +26,7 @@ You will need:
 
 ## Episode links
 
-Playing an episode needs a link to that episode on Prime Video. The One Chicago universe **ships with its episode links included**. Other universes — or your own updated links file — can be added at any time: the app has an **Episode links** field in Settings (and during setup) that loads a small JSON file of links from an address you give it. The format and rules are documented in [docs/EPISODE-LINKS.md](docs/EPISODE-LINKS.md), and this repository's own copy of the Chicago links file is [onetimeline-prime-links.json](onetimeline-prime-links.json).
+Playing an episode needs a link to that episode on Prime Video. **Every universe ships with its episode links built into the pack** — One Chicago includes links for 827 of its 846 episodes. If a link is ever wrong or missing, you can paste the correct one on the episode's own page and yours takes over. Details are in [docs/EPISODE-LINKS.md](docs/EPISODE-LINKS.md); where Chicago's links came from is documented in [docs/ONE-CHICAGO-SOURCES.md](docs/ONE-CHICAGO-SOURCES.md), and the same list is kept in this repository as [onetimeline-prime-links.json](onetimeline-prime-links.json) for anyone who wants to audit it.
 
 ## Privacy
 
@@ -36,6 +36,7 @@ No accounts, no ads, no analytics, no tracking. Everything you watch and every s
 
 - **Watch order** is based on the community spreadsheet **"Chicago Franchise Episode Timeline (with Cameos)"**, created and maintained by its author and the contributors who keep it current — thank you. <https://docs.google.com/spreadsheets/d/1d6nnW_I3qrWUujOXi1Db2717wUKX86J4wRZdGOYPDog>
 - **Episode descriptions** are provided by [TVmaze](https://www.tvmaze.com) and used under the CC BY-SA licence.
+- **Full provenance** for the Chicago pack — every source, how the data was obtained, and how the app uses it — is documented in [docs/ONE-CHICAGO-SOURCES.md](docs/ONE-CHICAGO-SOURCES.md). Any universe added to this project must document its sources the same way; see [docs/CREATING-A-UNIVERSE.md](docs/CREATING-A-UNIVERSE.md).
 - One Timeline is a fan project. It is **not affiliated with** NBC, NBCUniversal, Wolf Entertainment, Roku, Amazon, or The CW. Show titles are used only to describe compatibility and episode data.
 
 ## Building

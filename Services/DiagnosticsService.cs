@@ -53,6 +53,12 @@ public static class DiagnosticsService
 		}
 		sb.AppendLine();
 
+		// Universe (Decision 1C): which pack is on screen, and how
+		// many the user has included. Ids and counts only — pack
+		// names are public catalogue facts.
+		sb.AppendLine($"Universe: {store.ActiveUniverseId} (active) · {store.IncludedUniverseIds.Count} included");
+		sb.AppendLine();
+
 		// Dataset.
 		int withDesc = store.Episodes.Count(e => !string.IsNullOrWhiteSpace(e.Description));
 		sb.AppendLine($"Dataset: {store.Episodes.Count} episodes · {withDesc} with descriptions");

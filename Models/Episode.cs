@@ -12,9 +12,9 @@ namespace OneChicago.Models;
 /// The watch-order sheet's written notes are NOT shipped (someone
 /// else's expression); the factual event flags derived from them
 /// are. Prime Video content IDs DO ship for the launch universe
-/// (Decision 1 as amended 2026-11-03); a user's own links — a
-/// fetched episode-links source, or a hand-saved per-episode
-/// override — live outside the dataset and outrank it (Store).
+/// (Decision 1 as amended 2026-11-03); a user's own hand-saved
+/// per-episode overrides live outside the dataset and outrank it
+/// (Store).
 /// </summary>
 public class Episode
 {
@@ -38,10 +38,9 @@ public class Episode
 	/// <summary>The Prime Video content ID used to play this episode.
 	/// The launch universe's dataset ships its episodes' links in
 	/// this field (Decision 1 as amended 2026-11-03). At runtime the
-	/// Store keeps it resolved to the effective ID — the dataset's
-	/// link, a user-fetched source link, or the user's hand-saved
-	/// override, in that precedence order (Store.PrimeIdFor). Empty
-	/// means tracker-only.</summary>
+	/// Store keeps it resolved to the effective ID — the user's
+	/// hand-saved override when one exists, else the dataset's link
+	/// (Store.PrimeIdFor). Empty means tracker-only.</summary>
 	[JsonPropertyName("primeContentId")] public string PrimeContentId { get; set; } = "";
 
 	// Local state, not part of the shipped dataset.

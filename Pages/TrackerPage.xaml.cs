@@ -188,11 +188,64 @@ public partial class TrackerPage : ContentPage
 		int pct = total > 0 ? (int)Math.Round(100.0 * watched / total) : 0;
 		ProgressLabel.Text = $"{watched} of {total} episodes · {pct}%";
 		OverallProgress.Progress = total > 0 ? (double)watched / total : 0;
+		RefreshUniverseSwitcher();
 		RefreshHero();
 		BuildUpNext();
 		BuildRows();
 		RefreshPlayButton();
 		UpdateAutoplayUi();
+	}
+
+	// ---- Universe switcher (Decision 1C) -------------------------------
+
+	/// <summary>One chip per included universe, the active one
+	/// filled; tapping a chip makes that universe active and the
+	/// whole page re-resolves through Store.Changed → RefreshAll.
+	/// With zero or one included universe there is nothing to
+	/// switch between: the row hides, the progress bar keeps its
+	/// original bottom margin, and the header is pixel-for-pixel
+	/// the pre-universe one.</summary>
+	private void RefreshUniverseSwitcher()
+	{
+		var store = AppHost.Store;
+		var included = store.IncludedUniverseIds;
+		UniverseSwitcher.Clear();
+		if (included.Count <= 1)
+		{
+			UniverseSwitcher.IsVisible = false;
+			OverallProgress.Margin = new Thickness(0, 0, 0, 18);
+			return;
+		}
+		UniverseSwitcher.IsVisible = true;
+		UniverseSwitcher.Margin = new Thickness(0, 0, 0, 18);
+		OverallProgress.Margin = new Thickness(0);
+		foreach (var id in included)
+		{
+			var info = UniverseCatalogue.Find(id);
+			if (info == null) continue;
+			bool active = id == store.ActiveUniverseId;
+			var label = new Label
+			{
+				Text = info.DisplayName,
+				FontSize = 14,
+				FontAttributes = active ? FontAttributes.Bold : FontAttributes.None,
+			};
+			label.SetDynamicResource(Label.TextColorProperty, active ? "ThAccentText" : "ThAccent");
+			var chip = new Border
+			{
+				Padding = new Thickness(12, 6),
+				StrokeThickness = 0,
+				Content = label,
+				StrokeShape = new RoundRectangle { CornerRadius = new CornerRadius(10) },
+			};
+			chip.SetDynamicResource(Border.BackgroundColorProperty, active ? "ThAccent" : "ThBtn2Bg");
+			var captured = id;
+			chip.GestureRecognizers.Add(new TapGestureRecognizer
+			{
+				Command = new Command(async () => await AppHost.Store.SetActiveUniverseAsync(captured)),
+			});
+			UniverseSwitcher.Add(chip);
+		}
 	}
 
 	// ---- Hero ----------------------------------------------------------

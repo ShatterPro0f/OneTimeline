@@ -19,8 +19,12 @@ namespace OneChicago.Pages;
 ///    system settings page).
 ///  - Appearance: "Match system" plus the five themes, and the
 ///    spoiler guard.
-///  - Backup: export / import / start over.
+///  - Backup: export / import / start over. Exports are stamped
+///    with the active universe; an import applies only to its own
+///    universe (Decision 1C).
 ///  - Setup (Decision 7): re-run the first-run setup flow.
+///  - Universes (Decision 1C): the include switches, shared with
+///    setup's Universes step (UniverseSection).
 ///  - About: version, the TVmaze attribution and non-affiliation
 ///    notice (Decision 1), and "Share diagnostics" (Decision 6).
 /// Every setting defaults to the shipped v1.2 behaviour; nothing here
@@ -50,6 +54,15 @@ public partial class SettingsPage : ContentPage
 	private void OnThemeChanged() =>
 		MainThread.BeginInvokeOnMainThread(BuildThemeRows);
 
+	/// <summary>The backup section's data line. It speaks for the
+	/// ACTIVE universe (Decision 1C), so it is refreshed whenever a
+	/// universe toggle may have moved the active pointer.</summary>
+	private void RefreshDataLabel()
+	{
+		var store = AppHost.Store;
+		DataLabel.Text = $"{store.Episodes.Count} episodes in watch order · {store.WatchedCount} watched · check-offs and settings are saved on this phone only.";
+	}
+
 	private void LoadUi()
 	{
 		_loading = true;
@@ -64,13 +77,17 @@ public partial class SettingsPage : ContentPage
 		SpoilerSwitch.IsToggled = store.SpoilerGuardEnabled;
 		BackgroundSwitch.IsToggled = store.BackgroundModeEnabled;
 		_loading = false;
-		LinksSection.Refresh();
 		RefreshBackgroundStatus();
 		SessionLimitValueLabel.Text = SessionLimitText(store.AutoplaySessionLimit);
 		CreditsValueLabel.Text = CreditsText(store.CreditsThreshold);
 		RefreshAutoplayNote();
 		BuildThemeRows();
-		DataLabel.Text = $"{store.Episodes.Count} episodes in watch order · {store.WatchedCount} watched · check-offs and settings are saved on this phone only.";
+		RefreshDataLabel();
+		// The universe rows (shared with setup — UniverseSection).
+		// Fire-and-forget: the rows build asynchronously (episode
+		// counts load datasets), and a toggle refreshes the
+		// data-dependent label through the callback.
+		_ = UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, RefreshDataLabel);
 		// Data refresh (iteration 7) is automatic on every app open
 		// and silent when it fails — this line is its only surface:
 		// the last successful update, or until then the last attempt.
@@ -564,7 +581,8 @@ public partial class SettingsPage : ContentPage
 				"Import", "Cancel");
 			if (!yes) return;
 
-			if (AppHost.Store.ImportStateJson(json))
+			var importResult = AppHost.Store.ImportStateJson(json);
+			if (importResult == Store.ImportResult.Ok)
 			{
 				// ApplySelection (not a bare palette apply): a backup
 				// carrying the "system" selection restores Match
@@ -572,6 +590,16 @@ public partial class SettingsPage : ContentPage
 				ThemeService.ApplySelection(AppHost.Store.ThemeId);
 				LoadUi();
 				await DisplayAlert("Imported", "Your progress now matches the backup.", "OK");
+			}
+			else if (importResult == Store.ImportResult.WrongUniverse)
+			{
+				// A good backup, but for another universe (Decision
+				// 1C): a backup only ever applies to its own
+				// universe's watch order. (DisplayAlertAsync: the
+				// non-obsolete form, so this new call adds no new
+				// warning to the file's existing set.)
+				await DisplayAlertAsync("Different universe",
+					"That backup was exported from a different universe than the one you're viewing, and a backup only ever applies to its own universe's watch order. Switch to that universe and import it there. Nothing was changed.", "OK");
 			}
 			else
 			{

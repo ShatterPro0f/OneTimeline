@@ -10,7 +10,6 @@ public static class AppHost
 	public static GuidedPlayer Player { get; } = new(Store, Roku);
 	public static AutoplayCoordinator Autoplay { get; } = new(Store, Monitor, Player);
 	public static DataRefreshService Refresher { get; } = new(Store);
-	public static SourceLinksService LinkSources { get; } = new(Store);
 
 	private static Task? _ready;
 

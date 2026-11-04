@@ -9,14 +9,13 @@ namespace OneChicago.Pages;
 /// context — and the actions: Play, Start from here, Mark watched.
 ///
 /// Prime Video links: the launch universe ships WITH its episode
-/// links (Decision 1 as amended 2026-11-03), and a fetched
-/// episode-links source can add more. This page carries the "Your
-/// Prime Video link" editor on top of both: the user pastes a link
-/// they copied from Prime Video themselves, the Store validates it
-/// strictly and keeps it as their override (the top precedence
-/// layer), and it can be removed again here. An episode with no
-/// link from any layer shows no Play button — it is tracker-only,
-/// exactly like an episode Prime doesn't carry.
+/// links (Decision 1 as amended 2026-11-03). This page carries the
+/// "Your Prime Video link" editor on top of them: the user pastes
+/// a link they copied from Prime Video themselves, the Store
+/// validates it strictly and keeps it as their override (the top
+/// precedence layer), and it can be removed again here. An episode
+/// with no link from any layer shows no Play button — it is
+/// tracker-only, exactly like an episode Prime doesn't carry.
 /// </summary>
 public partial class EpisodeDetailPage : ContentPage
 {
@@ -135,9 +134,7 @@ public partial class EpisodeDetailPage : ContentPage
 			? "Your link is saved for this episode — Play uses it."
 			: string.IsNullOrWhiteSpace(store.PrimeIdFor(_ep))
 				? "No link saved for this episode yet — it can be tracked, but not started from the app."
-				: store.GetSourceLink(_ep.Key) != null
-					? "A link from your episode-links file is set for this episode."
-					: "This episode's Prime Video link came with the app.";
+				: "This episode's Prime Video link came with the app.";
 		RemovePrimeLinkButton.IsVisible = hasOverride;
 	}
 

@@ -15,8 +15,8 @@ namespace OneChicago.Services;
 /// the third-party spreadsheet the personal build scraped, and it
 /// never calls JustWatch at all (no Prime IDs are fetched here —
 /// the launch universe's links ship in the dataset itself, and any
-/// further links are the user's own: hand-saved per episode, or
-/// fetched from their own episode-links source on their tap).
+/// further links are the user's own hand-saved per-episode
+/// overrides).
 ///
 /// What a refresh DOES fetch, on every cold start, without blocking
 /// the UI: episode metadata from TVmaze — descriptions, plus an
@@ -69,6 +69,13 @@ public class DataRefreshService
 	/// per cold start, after the store has loaded). Never throws.</summary>
 	public async Task RefreshOnStartAsync()
 	{
+		// Per-universe (Decision 1C): the refresh runs only for a
+		// universe whose catalogue entry declares a TVmaze mapping.
+		// A universe without one keeps its shipped dataset forever —
+		// the refresh genuinely never runs for it, and no attempt is
+		// recorded against it. (Chicago, the only mapped universe
+		// today, runs exactly the shipped behaviour below.)
+		if (_store.ActiveUniverse.TvMazeShowIds == null) return;
 		if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) return;
 		try
 		{
@@ -114,7 +121,7 @@ public class DataRefreshService
 	/// indices sane. Any Prime ID present in a dataset row must be a
 	/// strict GTI (the launch universe ships its links in the
 	/// dataset; the user's own further IDs live outside it, as
-	/// overrides and the fetched source layer). Relative check
+	/// hand-saved per-episode overrides). Relative check
 	/// (when a current dataset is supplied): count within a sane
 	/// band. Any failure means "keep the last known-good dataset."
 	/// </summary>
@@ -164,8 +171,8 @@ public class DataRefreshService
 	/// through untouched (the launch universe's dataset ships its
 	/// links — Decision 1 as amended); the refresh contributes
 	/// TVmaze metadata only, never an ID of its own, and
-	/// Store.ReplaceDataset reapplies the user's own link layers
-	/// (fetched source, hand-saved overrides) on top afterwards.</summary>
+	/// Store.ReplaceDataset reapplies the user's hand-saved
+	/// overrides on top afterwards.</summary>
 	private async Task<List<Episode>?> BuildDatasetAsync()
 	{
 		var tvmaze = await FetchTvmazeAsync();
@@ -205,15 +212,9 @@ public class DataRefreshService
 
 	// ---- Source: TVmaze (descriptions; air-date fallback) -----------
 
-	private static readonly Dictionary<string, int> TvMazeShowIds = new()
-	{
-		["Fire"] = 59,
-		["PD"] = 56,
-		["Med"] = 2246,
-		["Justice"] = 12327,
-		["FBI"] = 32158,
-		["Law & Order: SVU"] = 103,
-	};
+	// The TVmaze show-id map lives on the universe's catalogue
+	// entry (UniverseCatalogue, Decision 1C) — a universe declares
+	// its own mapping, or none. Chicago's ids are unchanged.
 
 	private class TvInfo
 	{
@@ -243,7 +244,11 @@ public class DataRefreshService
 	private async Task<Dictionary<string, TvInfo>> FetchTvmazeAsync()
 	{
 		var output = new Dictionary<string, TvInfo>();
-		foreach (var (show, sid) in TvMazeShowIds)
+		// The ACTIVE universe's declared mapping; RefreshOnStartAsync
+		// has already gated on it being present.
+		var showIds = _store.ActiveUniverse.TvMazeShowIds;
+		if (showIds == null) return output;
+		foreach (var (show, sid) in showIds)
 		{
 			using var epsDoc = JsonDocument.Parse(await GetStringAsync($"https://api.tvmaze.com/shows/{sid}/episodes"));
 			foreach (var ep in epsDoc.RootElement.EnumerateArray())

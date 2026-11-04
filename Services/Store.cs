@@ -11,13 +11,11 @@ namespace OneChicago.Services;
 
 /// <summary>
 /// Owns the episode dataset (embedded episodes.json) and the user's
-/// local state: watched check-offs, Prime content IDs from three
+/// local state: watched check-offs, Prime content IDs from two
 /// layers — the dataset's own shipped links (the launch universe
-/// ships its episodes' links; Decision 1 as amended 2026-11-03),
-/// the user's fetched episode-links source layer, and the user's
-/// hand-saved per-episode overrides — and TV settings. State
-/// persists to progress.json in the app's private data folder; the
-/// fetched source layer persists separately (sourcelinks.json).
+/// ships its episodes' links; Decision 1 as amended 2026-11-03) and
+/// the user's hand-saved per-episode overrides — and TV settings.
+/// State persists to progress.json in the app's private data folder.
 ///
 /// First run (production Decision 7): NOTHING is seeded watched.
 /// A fresh install starts with an honest empty progress file and the
@@ -122,14 +120,76 @@ public class Store
 
 	public const int PrimeChannelId = 13;
 
-	/// <summary>The universe this build of the app tracks, stamped
-	/// into every dataset file it writes (see DatasetFile). The app
-	/// is expected to gain further universes as separate packs over
-	/// time; the stamp is what will tell their datasets apart. This
-	/// tracker loads only its own universe's data.</summary>
-	public const string DatasetUniverseId = "one-chicago";
+	// ---- Universes (Decision 1C) --------------------------------
+	// A universe is a data pack: its own dataset, watch order and
+	// shipped links. Everything the user owns PER universe —
+	// watched check-offs, hand-saved link overrides, the
+	// last-started episode, the refreshed dataset copy and its
+	// timestamps — lives in that universe's UniverseData below.
+	// Global settings (TV, autoplay, theme…) stay global, further
+	// down. The Store's long-standing public surface (Episodes,
+	// UpNext, PrimeIdFor, LastStarted…, DataUpdatedAt…) delegates
+	// to the ACTIVE universe's data, which is what keeps the
+	// tracker, the guided player, the monitor, the foreground
+	// service and diagnostics working unchanged — and universe-
+	// blind — no matter how many packs the catalogue grows to.
 
-	public List<Episode> Episodes { get; private set; } = new();
+	/// <summary>All per-universe user data, keyed by universe id.
+	/// Entries are created on demand; a universe the user has
+	/// never touched simply has empty everything.</summary>
+	private readonly Dictionary<string, UniverseData> _universes = new();
+
+	/// <summary>The catalogue ids the user has chosen to include
+	/// (setup's Universes step; the Settings Universes section).
+	/// Resolved against the catalogue on load: unknown ids drop
+	/// out, and the set can never be empty — if nothing valid
+	/// remains, every built-in universe is included (the
+	/// fresh-install default).</summary>
+	private readonly HashSet<string> _included = new();
+
+	/// <summary>The included universe ids, in catalogue order.</summary>
+	public IReadOnlyList<string> IncludedUniverseIds =>
+		UniverseCatalogue.All.Where(u => _included.Contains(u.Id)).Select(u => u.Id).ToList();
+
+	/// <summary>How many universes are included right now.</summary>
+	public int IncludedUniverseCount => _included.Count;
+
+	/// <summary>The universe every feature is currently working
+	/// on. Always an included, catalogued universe.</summary>
+	public string ActiveUniverseId { get; private set; } = UniverseCatalogue.DefaultId;
+
+	/// <summary>The active universe's catalogue entry.</summary>
+	public UniverseInfo ActiveUniverse => UniverseCatalogue.Find(ActiveUniverseId) ?? UniverseCatalogue.Default;
+
+	private UniverseData DataFor(string universeId) =>
+		_universes.TryGetValue(universeId, out var data) ? data : _universes[universeId] = new UniverseData();
+
+	private UniverseData ActiveData => DataFor(ActiveUniverseId);
+
+	/// <summary>One universe's user-owned data. The episode list
+	/// loads lazily (refreshed device copy or embedded seed) and
+	/// is cached; everything else is plain state, persisted per
+	/// universe in the state file (see UniverseStateFile).</summary>
+	private sealed class UniverseData
+	{
+		public List<Episode>? Episodes;
+		public readonly Dictionary<string, string> DatasetIds = new();
+		public readonly HashSet<string> Watched = new();
+		public readonly Dictionary<string, string> PrimeIds = new();
+		public string LastStartedEpisodeKey = "";
+		public long LastStartedPositionMs;
+		public long LastPositionSavedAtMs = -1;
+		public DateTimeOffset? DataUpdatedAt;
+		public DateTimeOffset? DataRefreshAttemptedAt;
+	}
+
+	private static readonly List<Episode> EmptyEpisodes = new();
+
+	/// <summary>The ACTIVE universe's episode list — the single
+	/// surface every feature reads. Empty until the universe's
+	/// dataset has loaded.</summary>
+	public List<Episode> Episodes => ActiveData.Episodes ?? EmptyEpisodes;
+
 	public bool Loaded { get; private set; }
 
 	public string TvIp { get; set; } = DefaultTvIp;
@@ -139,10 +199,25 @@ public class Store
 	/// sequence actually got playing on the TV, and the last playback
 	/// position seen for it (fed by RokuMonitor's polling). The guided
 	/// sequence checks these before sending anything, so re-tapping Play
-	/// on the episode Sam is already watching can never restart it.</summary>
-	public string LastStartedEpisodeKey { get; private set; } = "";
-	public long LastStartedPositionMs { get; private set; }
-	private long _lastPositionSavedAtMs = -1;
+	/// on the episode Sam is already watching can never restart it.
+	/// PER UNIVERSE (Decision 1C): these delegate to the active
+	/// universe's data — "already watching episode X" is a fact about
+	/// one universe's watch order, never another's.</summary>
+	public string LastStartedEpisodeKey
+	{
+		get => ActiveData.LastStartedEpisodeKey;
+		private set => ActiveData.LastStartedEpisodeKey = value;
+	}
+	public long LastStartedPositionMs
+	{
+		get => ActiveData.LastStartedPositionMs;
+		private set => ActiveData.LastStartedPositionMs = value;
+	}
+	private long LastPositionSavedAtMs
+	{
+		get => ActiveData.LastPositionSavedAtMs;
+		set => ActiveData.LastPositionSavedAtMs = value;
+	}
 
 	/// <summary>Autoplay: when the TV shows the current episode has
 	/// finished, auto-advance and play the next one. Default ON; Sam's
@@ -250,89 +325,76 @@ public class Store
 	// make the UI rebuild for a bookkeeping write. Settings reads
 	// them fresh each time it appears.
 
-	/// <summary>When a data refresh last completed successfully —
-	/// the dataset was verified current (and swapped if it changed).
-	/// Null until the first successful run. Shown in Settings as
-	/// "Data updated · &lt;date&gt;".</summary>
-	public DateTimeOffset? DataUpdatedAt { get; private set; }
+	/// <summary>When a data refresh last completed successfully for
+	/// the ACTIVE universe — the dataset was verified current (and
+	/// swapped if it changed). Null until the first successful run
+	/// (and always null for a universe with no refresh mapping).
+	/// Shown in Settings as "Data updated · &lt;date&gt;".</summary>
+	public DateTimeOffset? DataUpdatedAt
+	{
+		get => ActiveData.DataUpdatedAt;
+		private set => ActiveData.DataUpdatedAt = value;
+	}
 
-	/// <summary>When a data refresh was last attempted (whether it
-	/// succeeded or not). Shown in Settings until the first success.</summary>
-	public DateTimeOffset? DataRefreshAttemptedAt { get; private set; }
+	/// <summary>When a data refresh was last attempted for the
+	/// ACTIVE universe (whether it succeeded or not). Shown in
+	/// Settings until the first success.</summary>
+	public DateTimeOffset? DataRefreshAttemptedAt
+	{
+		get => ActiveData.DataRefreshAttemptedAt;
+		private set => ActiveData.DataRefreshAttemptedAt = value;
+	}
 
-	// ---- Episode-links source (2026-11-03) -------------------------
-	// The launch universe ships its links in the dataset; this is
-	// the user's OWN additional source — an episode-links file they
-	// point the app at (a future universe's file, or their own
-	// updated one), fetched only on their explicit tap
-	// (SourceLinksService). Device-local throughout: the address is
-	// a state-file setting, the fetched layer is its own file, and
-	// neither is ever part of a progress export or import.
+	// The active universe's working sets. These delegate so every
+	// existing call site in this class keeps reading and writing
+	// "the" watched set / overrides / shipped IDs — they are the
+	// ACTIVE universe's now (Decision 1C).
+	private HashSet<string> _watched => ActiveData.Watched;
+	private Dictionary<string, string> _primeIds => ActiveData.PrimeIds;
 
-	/// <summary>The address the user gave for their episode-links
-	/// file ("" = none). Persisted in the state file so the Sources
-	/// section can prefill it; fetching only ever happens on the
-	/// user's tap, never from this value alone.</summary>
-	public string SourceLinksUrl { get; private set; } = "";
-
-	/// <summary>How many of the fetched file's links are live right
-	/// now (recomputed against the current dataset on load).</summary>
-	public int SourceLinksAppliedCount { get; private set; }
-
-	/// <summary>How many entries the last fetch skipped (unknown
-	/// episode, or no valid Prime ID in the value).</summary>
-	public int SourceLinksIgnoredCount { get; private set; }
-
-	/// <summary>When the current layer was fetched. Null until the
-	/// first successful fetch.</summary>
-	public DateTimeOffset? SourceLinksFetchedAt { get; private set; }
-
-	/// <summary>Whether a fetched episode-links layer is in force.</summary>
-	public bool HasSourceLinks => _sourceLinks.Count > 0;
-
-	private readonly HashSet<string> _watched = new();
-	private readonly Dictionary<string, string> _primeIds = new();
-
-	/// <summary>Links from the user's fetched episode-links source
-	/// (see SourceLinksService) — the middle precedence layer,
-	/// between the dataset's shipped links and the user's hand-saved
-	/// overrides. Persisted as its own file (sourcelinks.json),
-	/// never inside the dataset and never inside progress.json.</summary>
-	private readonly Dictionary<string, string> _sourceLinks = new();
-
-	/// <summary>Prime IDs exactly as shipped in the dataset, captured
-	/// before any user layer is applied — so progress import can
-	/// restore them before applying the backup's overrides. The
-	/// launch universe's dataset ships its episodes' links (Decision
-	/// 1 as amended 2026-11-03); a universe whose dataset ships none
-	/// simply leaves these empty.</summary>
-	private readonly Dictionary<string, string> _datasetIds = new();
+	/// <summary>Prime IDs exactly as shipped in the ACTIVE
+	/// universe's dataset, captured before any user layer is
+	/// applied — so progress import can restore them before
+	/// applying the backup's overrides. The launch universe's
+	/// dataset ships its episodes' links (Decision 1 as amended
+	/// 2026-11-03); a universe whose dataset ships none simply
+	/// leaves these empty.</summary>
+	private Dictionary<string, string> _datasetIds => ActiveData.DatasetIds;
 
 	public event Action? Changed;
 
 	private string StatePath => Path.Combine(FileSystem.AppDataDirectory, "progress.json");
 
-	/// <summary>The fetched episode-links layer's home on the device
-	/// — a file of the user's own data, kept apart from both the
-	/// dataset (which a refresh may swap wholesale) and the state
-	/// file (whose backup format deliberately excludes it).</summary>
-	private string SourceLinksPath => Path.Combine(FileSystem.AppDataDirectory, "sourcelinks.json");
+	/// <summary>A universe's refreshed dataset's home on the device
+	/// (per-universe since the multi-universe build — Decision 1C).
+	/// The APK-embedded dataset remains the seed; after the first
+	/// successful refresh for a universe, this file is what its
+	/// load reads.</summary>
+	private static string DataPathFor(string universeId) =>
+		Path.Combine(FileSystem.AppDataDirectory, $"episodes.{universeId}.refreshed.json");
 
-	/// <summary>The on-disk form of the fetched episode-links layer:
-	/// the validated links (episode key → strict GTI) plus the fetch
-	/// metadata the Sources section reports.</summary>
-	private class SourceLinksFileData
-	{
-		public string? FetchedAt { get; set; }
-		public int Ignored { get; set; }
-		public Dictionary<string, string> Links { get; set; } = new();
-	}
+	/// <summary>Where pre-multi-universe builds kept the refreshed
+	/// dataset. It is the launch universe's by definition (Chicago
+	/// was the only universe those builds knew): still read as
+	/// Chicago's copy until Chicago's next refresh writes the
+	/// per-universe path and retires this file.</summary>
+	private static string LegacyDataPath =>
+		Path.Combine(FileSystem.AppDataDirectory, "episodes.refreshed.json");
 
-	/// <summary>The refreshed dataset's home on the device (iteration
-	/// 7). The APK-embedded episodes.json remains the seed; after the
-	/// first successful refresh, this file is what LoadAsync reads.</summary>
-	private string DataPath => Path.Combine(FileSystem.AppDataDirectory, "episodes.refreshed.json");
-
+	/// <summary>
+	/// The state file. v2 (multi-universe, Decision 1C): the
+	/// universe layer — <see cref="IncludedUniverses"/>,
+	/// <see cref="ActiveUniverseId"/> and the per-universe sections
+	/// in <see cref="Universes"/> — sits beside the GLOBAL settings,
+	/// which stay flat exactly as before. The Watched / PrimeIds /
+	/// LastStarted / refresh-timestamp fields directly below are
+	/// the PRE-refactor shape, kept for reading only: a file that
+	/// has them but no Universes section is a pre-refactor file,
+	/// and those flat per-universe fields are the launch universe's
+	/// data (Chicago was the only universe then) — LoadAsync
+	/// migrates them into Chicago's section untouched. New saves
+	/// never write them (suppressed when null, and they stay null).
+	/// </summary>
 	private class StateFile
 	{
 		/// <summary>First-run setup (Decision 7): null in state files
@@ -341,12 +403,37 @@ public class Store
 		/// re-prompted. Fresh installs persist an explicit false until
 		/// setup is finished or skipped.</summary>
 		public bool? SetupCompleted { get; set; }
-		public List<string> Watched { get; set; } = new();
-		public Dictionary<string, string> PrimeIds { get; set; } = new();
+
+		// ---- Universe layer (v2) ----
+		/// <summary>The included universe ids, as persisted. Null in
+		/// pre-refactor files → the fresh-install default applies
+		/// (every built-in universe included).</summary>
+		public List<string>? IncludedUniverses { get; set; }
+		/// <summary>The active universe id; null in pre-refactor
+		/// files → the launch universe.</summary>
+		public string? ActiveUniverseId { get; set; }
+		/// <summary>Per-universe sections, keyed by universe id. Its
+		/// very presence is the v2 marker: null (absent) means a
+		/// pre-refactor file whose flat fields migrate.</summary>
+		public Dictionary<string, UniverseStateFile>? Universes { get; set; }
+
+		// ---- Legacy flat per-universe fields (read-only) ----
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public List<string>? Watched { get; set; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public Dictionary<string, string>? PrimeIds { get; set; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? LastStartedEpisodeKey { get; set; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public long? LastStartedPositionMs { get; set; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? DataUpdatedAt { get; set; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? DataRefreshAttemptedAt { get; set; }
+
+		// ---- Global settings (unchanged across the refactor) ----
 		public string TvIp { get; set; } = DefaultTvIp;
 		public int PollSeconds { get; set; } = DefaultPollSeconds;
-		public string LastStartedEpisodeKey { get; set; } = "";
-		public long LastStartedPositionMs { get; set; }
 		public bool? AutoplayEnabled { get; set; }
 		public int? AutoplayCountdownSeconds { get; set; }
 		public string? ThemeId { get; set; }
@@ -356,17 +443,28 @@ public class Store
 		public int? AutoplaySessionLimit { get; set; }
 		public bool? BackgroundModeEnabled { get; set; }
 		public bool? NotificationPromptDone { get; set; }
+	}
+
+	/// <summary>One universe's section of the state file: its
+	/// watched set, its hand-saved link overrides, its last-started
+	/// episode, and its refresh timestamps. Everything here belongs
+	/// to exactly one universe and is only ever applied to it.</summary>
+	private class UniverseStateFile
+	{
+		public List<string> Watched { get; set; } = new();
+		public Dictionary<string, string> PrimeIds { get; set; } = new();
+		public string LastStartedEpisodeKey { get; set; } = "";
+		public long LastStartedPositionMs { get; set; }
 		public string? DataUpdatedAt { get; set; }
 		public string? DataRefreshAttemptedAt { get; set; }
-		/// <summary>The user's episode-links source address. A
-		/// state-file setting only — it is deliberately absent from
-		/// the export format (see the backup section below).</summary>
-		public string? SourceLinksUrl { get; set; }
 	}
 
 	/// <summary>Apply the nullable iteration-3 settings from a state
 	/// file, each falling back to its v1.2-behaviour default when the
-	/// file predates the setting. Shared by first load and import.</summary>
+	/// file predates the setting. Shared by first load and import.
+	/// (The refresh timestamps this method used to apply are
+	/// per-universe since Decision 1C and are handled with the
+	/// universe layer instead.)</summary>
 	private void ApplyOptionalSettings(StateFile state)
 	{
 		ProfileSelectEnabled = state.ProfileSelectEnabled ?? true;
@@ -379,8 +477,6 @@ public class Store
 			: 0;
 		BackgroundModeEnabled = state.BackgroundModeEnabled ?? true;
 		NotificationPromptDone = state.NotificationPromptDone ?? false;
-		DataUpdatedAt = ParseTimestamp(state.DataUpdatedAt);
-		DataRefreshAttemptedAt = ParseTimestamp(state.DataRefreshAttemptedAt);
 	}
 
 	private static DateTimeOffset? ParseTimestamp(string? s) =>
@@ -390,38 +486,141 @@ public class Store
 	private static string? FormatTimestamp(DateTimeOffset? t) =>
 		t?.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
 
-	/// <summary>Read the episode dataset: the device copy left by a
-	/// successful data refresh (iteration 7) when one exists, parses,
-	/// AND passes the same full validation a fresh refresh faces
-	/// (audit 1.4/1.10 — the old load check was count-only), else the
-	/// APK-embedded seed. A corrupt or anomalous device copy must
-	/// never brick startup — it just falls back to the seed.</summary>
-	private async Task<string> LoadDatasetJsonAsync()
+	/// <summary>Read one universe's episode dataset: the device copy
+	/// left by a successful data refresh (iteration 7) when one
+	/// exists, parses, AND passes the same full validation a fresh
+	/// refresh faces (audit 1.4/1.10 — the old load check was
+	/// count-only), else the universe's APK-embedded seed. A corrupt
+	/// or anomalous device copy must never brick startup — it just
+	/// falls back to the seed. For the launch universe, the
+	/// pre-multi-universe device-copy path is tried too (it is
+	/// Chicago's copy by definition).</summary>
+	private async Task<string> LoadDatasetJsonAsync(string universeId)
 	{
-		if (File.Exists(DataPath))
+		foreach (var path in DeviceDatasetCandidates(universeId))
 		{
+			if (!File.Exists(path)) continue;
 			try
 			{
-				if (new FileInfo(DataPath).Length <= BoundedRead.RefreshCapBytes)
+				if (new FileInfo(path).Length <= BoundedRead.RefreshCapBytes)
 				{
-					var device = await File.ReadAllTextAsync(DataPath);
-					var probe = DatasetFile.Parse(device, DatasetUniverseId);
+					var device = await File.ReadAllTextAsync(path);
+					var probe = DatasetFile.Parse(device, universeId);
 					if (probe != null && DataRefreshService.ValidateDataset(probe)) return device;
 				}
 			}
-			catch { /* fall through to the embedded seed */ }
+			catch { /* try the next candidate, then the embedded seed */ }
 		}
-		using var stream = await FileSystem.OpenAppPackageFileAsync("episodes.json");
+		var info = UniverseCatalogue.Find(universeId);
+		using var stream = await FileSystem.OpenAppPackageFileAsync(info?.DatasetResourceName ?? "episodes.json");
 		using var reader = new StreamReader(stream);
 		return await reader.ReadToEndAsync();
+	}
+
+	/// <summary>The device-copy paths a universe's load tries, in
+	/// order: its own per-universe path, then (launch universe only)
+	/// the pre-refactor path.</summary>
+	private IEnumerable<string> DeviceDatasetCandidates(string universeId)
+	{
+		yield return DataPathFor(universeId);
+		if (universeId == UniverseCatalogue.DefaultId) yield return LegacyDataPath;
+	}
+
+	/// <summary>Load (once) and cache a universe's episode list,
+	/// materializing that universe's own watched flags, shipped IDs
+	/// and effective IDs onto the rows — exactly what first load has
+	/// always done for Chicago, now per universe. A pack whose
+	/// dataset can't be read at all loads as empty rather than
+	/// bricking startup; its tracker simply has no rows.</summary>
+	private async Task<List<Episode>> LoadUniverseDatasetAsync(string universeId)
+	{
+		var data = DataFor(universeId);
+		if (data.Episodes != null) return data.Episodes;
+		List<Episode> episodes;
+		try
+		{
+			var json = await LoadDatasetJsonAsync(universeId);
+			episodes = DatasetFile.Parse(json, universeId) ?? new List<Episode>();
+		}
+		catch
+		{
+			episodes = new List<Episode>();
+		}
+		data.Episodes = episodes;
+		data.DatasetIds.Clear();
+		foreach (var ep in episodes) data.DatasetIds[ep.Key] = ep.PrimeContentId;
+		foreach (var ep in episodes) ep.Watched = data.Watched.Contains(ep.Key);
+		foreach (var ep in episodes) ep.PrimeContentId = PrimeIdFor(data, ep);
+		return episodes;
+	}
+
+	/// <summary>How many episodes a universe's dataset holds —
+	/// the count shown on its setup/Settings row. Derived from the
+	/// loaded dataset, never hardcoded; loads the dataset on
+	/// demand and caches it.</summary>
+	public async Task<int> UniverseEpisodeCountAsync(string universeId) =>
+		(await LoadUniverseDatasetAsync(universeId)).Count;
+
+	/// <summary>Resolve the universe layer from a parsed state file
+	/// (or a fresh install): every known universe's own data, the
+	/// included set, and the active universe.
+	///
+	/// MIGRATION (Decision 1C): a state file with no Universes
+	/// section predates the multi-universe build. Its flat watched
+	/// list, overrides, last-started episode and refresh timestamps
+	/// ARE the launch universe's — Chicago was the only universe
+	/// those builds knew — and are adopted into Chicago's section
+	/// untouched: nothing watched, saved, or configured is lost or
+	/// reset. The included set defaults to every built-in universe
+	/// (today's behaviour, preserved exactly) and the active
+	/// universe is the launch universe.</summary>
+	private void ResolveUniverses(StateFile? state)
+	{
+		_universes.Clear();
+		if (state?.Universes != null)
+		{
+			foreach (var (id, saved) in state.Universes)
+			{
+				if (UniverseCatalogue.Find(id) == null || saved == null) continue;
+				var data = DataFor(id);
+				foreach (var k in saved.Watched) data.Watched.Add(k);
+				foreach (var kv in saved.PrimeIds) data.PrimeIds[kv.Key] = kv.Value;
+				data.LastStartedEpisodeKey = saved.LastStartedEpisodeKey ?? "";
+				data.LastStartedPositionMs = saved.LastStartedPositionMs;
+				data.LastPositionSavedAtMs = saved.LastStartedPositionMs;
+				data.DataUpdatedAt = ParseTimestamp(saved.DataUpdatedAt);
+				data.DataRefreshAttemptedAt = ParseTimestamp(saved.DataRefreshAttemptedAt);
+			}
+		}
+		else if (state != null)
+		{
+			// Pre-refactor file → its flat per-universe fields are
+			// the launch universe's data.
+			var data = DataFor(UniverseCatalogue.DefaultId);
+			foreach (var k in state.Watched ?? new List<string>()) data.Watched.Add(k);
+			foreach (var kv in state.PrimeIds ?? new Dictionary<string, string>()) data.PrimeIds[kv.Key] = kv.Value;
+			data.LastStartedEpisodeKey = state.LastStartedEpisodeKey ?? "";
+			data.LastStartedPositionMs = state.LastStartedPositionMs ?? 0;
+			data.LastPositionSavedAtMs = state.LastStartedPositionMs ?? 0;
+			data.DataUpdatedAt = ParseTimestamp(state.DataUpdatedAt);
+			data.DataRefreshAttemptedAt = ParseTimestamp(state.DataRefreshAttemptedAt);
+		}
+
+		_included.Clear();
+		if (state?.IncludedUniverses != null)
+			foreach (var id in state.IncludedUniverses)
+				if (UniverseCatalogue.Find(id) != null) _included.Add(id);
+		if (_included.Count == 0)
+			foreach (var u in UniverseCatalogue.All) _included.Add(u.Id);
+
+		ActiveUniverseId = state?.ActiveUniverseId is { } savedActive && _included.Contains(savedActive)
+			? savedActive
+			: IncludedUniverseIds[0];
 	}
 
 	public async Task LoadAsync()
 	{
 		if (Loaded) return;
-
-		var json = await LoadDatasetJsonAsync();
-		Episodes = DatasetFile.Parse(json, DatasetUniverseId) ?? new();
 
 		StateFile? state = null;
 		bool stateCorrupt = false;
@@ -434,7 +633,6 @@ public class Store
 			}
 			catch { state = null; stateCorrupt = true; }
 		}
-		SourceLinksUrl = state?.SourceLinksUrl ?? "";
 
 		if (stateCorrupt)
 		{
@@ -458,22 +656,27 @@ public class Store
 			// written now — it persists the explicit false, so a
 			// process death mid-setup re-offers setup next launch
 			// instead of mistaking this for a pre-setup install.
+			// Universes: every built-in included, the launch universe
+			// active (ResolveUniverses' defaults).
 			SetupCompleted = false;
+			ResolveUniverses(state: null);
+			await LoadUniverseDatasetAsync(ActiveUniverseId);
 			SaveSettings();
 		}
 		else
 		{
-			foreach (var k in state.Watched) _watched.Add(k);
-			foreach (var kv in state.PrimeIds) _primeIds[kv.Key] = kv.Value;
+			// The universe layer first: it adopts the file's
+			// per-universe sections — or, for a pre-refactor file,
+			// migrates its flat fields into the launch universe
+			// (see ResolveUniverses). The active universe's dataset
+			// then materializes against that data below.
+			ResolveUniverses(state);
 			// A stored address that fails the production rule (typed
 			// before validation existed, or carried in by an old
 			// backup) is dropped to the empty setup state — the app
 			// must never poll a bad address (audit 1.3).
 			TvIp = TryValidateTvAddress(state.TvIp, out var validIp) ? validIp : DefaultTvIp;
 			PollSeconds = IsValidPollSeconds(state.PollSeconds) ? state.PollSeconds : DefaultPollSeconds;
-			LastStartedEpisodeKey = state.LastStartedEpisodeKey ?? "";
-			LastStartedPositionMs = state.LastStartedPositionMs;
-			_lastPositionSavedAtMs = state.LastStartedPositionMs;
 			AutoplayEnabled = state.AutoplayEnabled ?? true;
 			AutoplayCountdownSeconds = state.AutoplayCountdownSeconds is int cd && IsValidCountdownSeconds(cd)
 				? cd
@@ -486,43 +689,11 @@ public class Store
 			// setup yet) re-offers the flow.
 			SetupCompleted = state.SetupCompleted ?? true;
 			ApplyOptionalSettings(state);
+			await LoadUniverseDatasetAsync(ActiveUniverseId);
 		}
-
-		LoadSourceLinks();
-
-		foreach (var ep in Episodes) _datasetIds[ep.Key] = ep.PrimeContentId;
-		foreach (var ep in Episodes) ep.Watched = _watched.Contains(ep.Key);
-		ApplyPrimeIds();
 
 		Loaded = true;
 		Changed?.Invoke();
-	}
-
-	/// <summary>Read the fetched episode-links layer, if one is on
-	/// the device. Defensive throughout (the layer is re-fetchable,
-	/// never the user's only copy of anything): an oversized,
-	/// unparseable or stale-keyed file simply leaves the layer
-	/// unloaded rather than costing a startup. Every surviving
-	/// entry is re-checked against the CURRENT dataset's keys and
-	/// the strict GTI rule, and the applied count is recomputed
-	/// from what actually survived.</summary>
-	private void LoadSourceLinks()
-	{
-		if (!File.Exists(SourceLinksPath)) return;
-		try
-		{
-			if (new FileInfo(SourceLinksPath).Length > BoundedRead.ImportCapBytes) return;
-			var data = JsonSerializer.Deserialize<SourceLinksFileData>(File.ReadAllText(SourceLinksPath));
-			if (data?.Links == null) return;
-			var validKeys = Episodes.Select(e => e.Key).ToHashSet();
-			foreach (var kv in data.Links)
-				if (validKeys.Contains(kv.Key) && IsValidContentId(kv.Value))
-					_sourceLinks[kv.Key] = kv.Value;
-			SourceLinksAppliedCount = _sourceLinks.Count;
-			SourceLinksIgnoredCount = data.Ignored;
-			SourceLinksFetchedAt = ParseTimestamp(data.FetchedAt);
-		}
-		catch { /* a damaged layer costs a re-fetch, never a crash */ }
 	}
 
 	public void SaveSettings() => SaveSettingsCore(notify: true);
@@ -533,15 +704,32 @@ public class Store
 
 	private void SaveSettingsCore(bool notify)
 	{
+		// v2 shape (Decision 1C): global settings flat, exactly as
+		// before; per-universe data in its own sections; the
+		// universe layer beside them. The pre-refactor flat
+		// per-universe fields are NOT written (they stay null and
+		// are suppressed) — a saved file is always the new shape.
+		var universes = new Dictionary<string, UniverseStateFile>();
+		foreach (var (id, data) in _universes)
+		{
+			universes[id] = new UniverseStateFile
+			{
+				Watched = data.Watched.ToList(),
+				PrimeIds = new Dictionary<string, string>(data.PrimeIds),
+				LastStartedEpisodeKey = data.LastStartedEpisodeKey,
+				LastStartedPositionMs = data.LastStartedPositionMs,
+				DataUpdatedAt = FormatTimestamp(data.DataUpdatedAt),
+				DataRefreshAttemptedAt = FormatTimestamp(data.DataRefreshAttemptedAt),
+			};
+		}
 		var state = new StateFile
 		{
 			SetupCompleted = SetupCompleted,
-			Watched = _watched.ToList(),
-			PrimeIds = new Dictionary<string, string>(_primeIds),
+			IncludedUniverses = IncludedUniverseIds.ToList(),
+			ActiveUniverseId = ActiveUniverseId,
+			Universes = universes,
 			TvIp = TvIp,
 			PollSeconds = PollSeconds,
-			LastStartedEpisodeKey = LastStartedEpisodeKey,
-			LastStartedPositionMs = LastStartedPositionMs,
 			AutoplayEnabled = AutoplayEnabled,
 			AutoplayCountdownSeconds = AutoplayCountdownSeconds,
 			ThemeId = ThemeId,
@@ -551,9 +739,6 @@ public class Store
 			AutoplaySessionLimit = AutoplaySessionLimit,
 			BackgroundModeEnabled = BackgroundModeEnabled,
 			NotificationPromptDone = NotificationPromptDone,
-			DataUpdatedAt = FormatTimestamp(DataUpdatedAt),
-			DataRefreshAttemptedAt = FormatTimestamp(DataRefreshAttemptedAt),
-			SourceLinksUrl = SourceLinksUrl.Length > 0 ? SourceLinksUrl : null,
 		};
 		Directory.CreateDirectory(FileSystem.AppDataDirectory);
 		File.WriteAllText(StatePath, JsonSerializer.Serialize(state));
@@ -580,28 +765,33 @@ public class Store
 	/// <summary>Swap in a refreshed dataset (DataRefreshService has
 	/// already validated it). Everything the user owns is reapplied
 	/// by episode identity, exactly as first load does it: watched
-	/// flags from the watched set, then the user's own link layers
-	/// on top of the dataset's shipped links — fetched source layer,
-	/// then hand-saved overrides (PrimeIdFor's precedence). The
-	/// current episode simply re-resolves against the new list
-	/// because every consumer reads UpNext off this list. Persists
-	/// the refreshed dataset to the device copy LoadAsync prefers,
-	/// then notifies (one ordinary UI refresh).</summary>
+	/// flags from the watched set, then the user's hand-saved
+	/// overrides on top of the dataset's shipped links (PrimeIdFor's
+	/// precedence). The current episode simply re-resolves against
+	/// the new list because every consumer reads UpNext off this
+	/// list. Persists the refreshed dataset to the device copy
+	/// LoadAsync prefers, then notifies (one ordinary UI refresh).</summary>
 	public void ReplaceDataset(List<Episode> fresh)
 	{
 		// Serialize BEFORE the user layers are applied below: the
 		// device copy must hold the dataset exactly as it shipped,
 		// so _datasetIds and a future import keep meaning "dataset
 		// ID", with the user's layers living only outside it.
-		// Written in the envelope format, stamped with the universe.
-		var pristineJson = DatasetFile.Serialize(fresh, DatasetUniverseId);
+		// Written in the envelope format, stamped with the ACTIVE
+		// universe (a refresh only ever runs for it).
+		var pristineJson = DatasetFile.Serialize(fresh, ActiveUniverseId);
+		var data = ActiveData;
 		_datasetIds.Clear();
 		foreach (var ep in fresh) _datasetIds[ep.Key] = ep.PrimeContentId;
-		Episodes = fresh;
-		foreach (var ep in Episodes) ep.Watched = _watched.Contains(ep.Key);
+		data.Episodes = fresh;
+		foreach (var ep in fresh) ep.Watched = _watched.Contains(ep.Key);
 		ApplyPrimeIds();
 		Directory.CreateDirectory(FileSystem.AppDataDirectory);
-		File.WriteAllText(DataPath, pristineJson);
+		File.WriteAllText(DataPathFor(ActiveUniverseId), pristineJson);
+		// Retire the pre-multi-universe device copy for the launch
+		// universe — the per-universe path supersedes it from here.
+		if (ActiveUniverseId == UniverseCatalogue.DefaultId && File.Exists(LegacyDataPath))
+			File.Delete(LegacyDataPath);
 		SaveSettings();
 	}
 
@@ -619,80 +809,33 @@ public class Store
 	public string GetDatasetContentId(string key) =>
 		_datasetIds.TryGetValue(key, out var id) ? id : "";
 
-	/// <summary>The fetched episode-links source's ID for an episode
-	/// identity, if the layer carries one.</summary>
-	public string? GetSourceLink(string key) =>
-		_sourceLinks.TryGetValue(key, out var id) && !string.IsNullOrWhiteSpace(id) ? id : null;
-
 	/// <summary>THE one place an episode's playable Prime ID is
 	/// resolved. Precedence: the user's hand-saved per-episode
-	/// override, then a link from the user's fetched episode-links
-	/// source, then the dataset's own shipped link (the launch
+	/// override, then the dataset's own shipped link (the launch
 	/// universe ships its links — Decision 1 as amended 2026-11-03),
 	/// else "". Every Play surface and the autoplay chain resolve
 	/// through here; Episode.PrimeContentId is kept materialized to
 	/// this same value (ApplyPrimeIds), so the two never disagree.</summary>
-	public string PrimeIdFor(Episode ep)
+	public string PrimeIdFor(Episode ep) => PrimeIdFor(ActiveData, ep);
+
+	/// <summary>PrimeIdFor against one universe's layers — dataset
+	/// materialization resolves rows against THEIR universe's data,
+	/// not whichever universe happens to be active.</summary>
+	private static string PrimeIdFor(UniverseData data, Episode ep)
 	{
-		if (_primeIds.TryGetValue(ep.Key, out var own) && !string.IsNullOrWhiteSpace(own)) return own;
-		if (_sourceLinks.TryGetValue(ep.Key, out var fetched) && !string.IsNullOrWhiteSpace(fetched)) return fetched;
-		return _datasetIds.TryGetValue(ep.Key, out var shipped) ? shipped : "";
+		if (data.PrimeIds.TryGetValue(ep.Key, out var own) && !string.IsNullOrWhiteSpace(own)) return own;
+		return data.DatasetIds.TryGetValue(ep.Key, out var shipped) ? shipped : "";
 	}
 
-	/// <summary>Materialize every episode's effective Prime ID from
-	/// the three layers (PrimeIdFor). Run wherever a layer changes:
-	/// first load, dataset swap, fetch, clear, override save, import,
-	/// start over.</summary>
+	/// <summary>Materialize the ACTIVE universe's episodes'
+	/// effective Prime IDs from its two layers (PrimeIdFor). Run
+	/// wherever a layer changes: first load, dataset swap,
+	/// override save, import, start over.</summary>
 	private void ApplyPrimeIds()
 	{
-		foreach (var ep in Episodes) ep.PrimeContentId = PrimeIdFor(ep);
-	}
-
-	/// <summary>Swap in a fully validated fetched episode-links
-	/// layer (SourceLinksService validates the whole file before
-	/// this is called, so the swap itself cannot half-apply).
-	/// Persists the layer file atomically (temp file + move, so a
-	/// crash mid-write can never leave a torn layer behind), then
-	/// the address in the state file, then re-resolves every
-	/// episode's effective ID.</summary>
-	public void ApplySourceLinks(string url, Dictionary<string, string> links, int ignored, DateTimeOffset fetchedAt)
-	{
-		_sourceLinks.Clear();
-		foreach (var kv in links) _sourceLinks[kv.Key] = kv.Value;
-		SourceLinksUrl = url;
-		SourceLinksAppliedCount = _sourceLinks.Count;
-		SourceLinksIgnoredCount = ignored;
-		SourceLinksFetchedAt = fetchedAt;
-
-		var data = new SourceLinksFileData
-		{
-			FetchedAt = FormatTimestamp(fetchedAt),
-			Ignored = ignored,
-			Links = new Dictionary<string, string>(_sourceLinks),
-		};
-		Directory.CreateDirectory(FileSystem.AppDataDirectory);
-		var tmp = SourceLinksPath + ".tmp";
-		File.WriteAllText(tmp, JsonSerializer.Serialize(data));
-		File.Move(tmp, SourceLinksPath, overwrite: true);
-
-		ApplyPrimeIds();
-		SaveSettings();
-	}
-
-	/// <summary>Remove the fetched episode-links layer and its
-	/// address (the Sources section's Clear). Hand-saved per-episode
-	/// overrides and the dataset's shipped links are untouched —
-	/// episodes simply fall back to them.</summary>
-	public void ClearSourceLinks()
-	{
-		_sourceLinks.Clear();
-		SourceLinksUrl = "";
-		SourceLinksAppliedCount = 0;
-		SourceLinksIgnoredCount = 0;
-		SourceLinksFetchedAt = null;
-		if (File.Exists(SourceLinksPath)) File.Delete(SourceLinksPath);
-		ApplyPrimeIds();
-		SaveSettings();
+		var data = ActiveData;
+		if (data.Episodes == null) return;
+		foreach (var ep in data.Episodes) ep.PrimeContentId = PrimeIdFor(data, ep);
 	}
 
 	/// <summary>Record a refresh attempt (persisted quietly).</summary>
@@ -739,6 +882,62 @@ public class Store
 		SaveSettings();
 	}
 
+	// ---- Universe selection (Decision 1C) ------------------------
+
+	/// <summary>Include or exclude a universe — one state, two
+	/// surfaces: setup's Universes step and the Settings Universes
+	/// section both call this. Including takes effect immediately
+	/// (the switcher and the rows pick it up from the persisted
+	/// set). Excluding never deletes the universe's progress: its
+	/// section stays in the state file, and re-including restores
+	/// everything exactly where it was left. Excluding the ACTIVE
+	/// universe moves the active pointer to another included
+	/// universe. Returns false — and changes nothing — for an
+	/// unknown universe, or when the exclusion would leave nothing
+	/// included: the app always has at least one universe, and the
+	/// UI explains that when it happens.</summary>
+	public async Task<bool> SetUniverseIncludedAsync(string universeId, bool included)
+	{
+		if (UniverseCatalogue.Find(universeId) == null) return false;
+		if (included)
+		{
+			if (_included.Add(universeId)) SaveSettings();
+			return true;
+		}
+		if (!_included.Contains(universeId)) return true;
+		if (_included.Count <= 1) return false;
+		_included.Remove(universeId);
+		if (ActiveUniverseId == universeId)
+			await SetActiveUniverseAsync(IncludedUniverseIds[0]);
+		else
+		{
+			SaveSettings();
+			Changed?.Invoke();
+		}
+		return true;
+	}
+
+	/// <summary>Make an included universe the active one (the
+	/// tracker switcher). Its dataset loads (cached after the
+	/// first time), its own progress becomes the Store's working
+	/// state, and every feature re-resolves against it via
+	/// Changed. Returns false — and changes nothing — for a
+	/// universe that isn't included.</summary>
+	public async Task<bool> SetActiveUniverseAsync(string universeId)
+	{
+		if (!_included.Contains(universeId)) return false;
+		if (universeId == ActiveUniverseId)
+		{
+			await LoadUniverseDatasetAsync(universeId);
+			return true;
+		}
+		ActiveUniverseId = universeId;
+		await LoadUniverseDatasetAsync(universeId);
+		SaveSettings();
+		Changed?.Invoke();
+		return true;
+	}
+
 	public void SetWatched(Episode ep, bool watched)
 	{
 		ep.Watched = watched;
@@ -757,9 +956,8 @@ public class Store
 	{
 		if (string.IsNullOrWhiteSpace(id))
 		{
-			// Clearing an override falls back through the layers —
-			// a fetched source link if one covers this episode,
-			// else the dataset's shipped link, else none.
+			// Clearing an override falls back to the dataset's
+			// shipped link, if it has one, else none.
 			_primeIds.Remove(ep.Key);
 			ep.PrimeContentId = PrimeIdFor(ep);
 			SaveSettings();
@@ -780,7 +978,7 @@ public class Store
 	{
 		LastStartedEpisodeKey = ep.Key;
 		LastStartedPositionMs = positionMs;
-		_lastPositionSavedAtMs = positionMs;
+		LastPositionSavedAtMs = positionMs;
 		SaveSettings();
 	}
 
@@ -792,9 +990,9 @@ public class Store
 	{
 		if (LastStartedEpisodeKey.Length == 0) return;
 		LastStartedPositionMs = positionMs;
-		if (Math.Abs(positionMs - _lastPositionSavedAtMs) >= 15_000)
+		if (Math.Abs(positionMs - LastPositionSavedAtMs) >= 15_000)
 		{
-			_lastPositionSavedAtMs = positionMs;
+			LastPositionSavedAtMs = positionMs;
 			SaveSettings();
 		}
 	}
@@ -874,19 +1072,22 @@ public class Store
 	// ---- Production backup format (audit 1.5) -------------------
 	// Versioned, and containing ONLY the watched list and settings:
 	// no TV address, no Prime-ID overrides, no last-started position,
-	// no leftover fields. The episode-links source is likewise
-	// excluded — neither its address nor the fetched layer is ever
-	// exported, and import never touches either. Import validates
-	// the schema/version, allow-lists watched keys against the
-	// current dataset, and — for legacy (pre-production) backups,
-	// which carried everything — applies the strict GTI rule to any
-	// content IDs and the TV address rule to any TV address field
-	// it finds.
+	// no leftover fields. Import validates the schema/version,
+	// allow-lists watched keys against the current dataset, and —
+	// for legacy (pre-production) backups, which carried
+	// everything — applies the strict GTI rule to any content IDs
+	// and the TV address rule to any TV address field it finds.
 
 	private class ExportFile
 	{
 		[JsonPropertyName("format")] public string Format { get; set; } = "onechicago-progress";
 		[JsonPropertyName("version")] public int Version { get; set; } = 1;
+		/// <summary>The universe this backup belongs to (Decision
+		/// 1C). Added with the multi-universe build; v1 backups
+		/// exported before it have no such field and are the launch
+		/// universe's by definition. A backup only ever applies to
+		/// its own universe — see ImportVersioned.</summary>
+		[JsonPropertyName("universe")] public string Universe { get; set; } = "";
 		[JsonPropertyName("watched")] public List<string> Watched { get; set; } = new();
 		[JsonPropertyName("settings")] public ExportSettings Settings { get; set; } = new();
 	}
@@ -904,12 +1105,14 @@ public class Store
 		[JsonPropertyName("backgroundModeEnabled")] public bool BackgroundModeEnabled { get; set; }
 	}
 
-	/// <summary>The current progress as the production backup format
-	/// (see above), for the share sheet.</summary>
+	/// <summary>The ACTIVE universe's current progress as the
+	/// production backup format (see above), stamped with its
+	/// universe id, for the share sheet.</summary>
 	public string ExportStateJson()
 	{
 		var export = new ExportFile
 		{
+			Universe = ActiveUniverseId,
 			Watched = _watched.ToList(),
 			Settings = new ExportSettings
 			{
@@ -927,37 +1130,56 @@ public class Store
 		return JsonSerializer.Serialize(export);
 	}
 
-	/// <summary>Replace progress from a backup. Returns false — and
-	/// changes nothing — if the text isn't a valid backup (schema or
-	/// version wrong, oversized, or unparseable).</summary>
-	public bool ImportStateJson(string json)
+	/// <summary>The outcome of an import attempt: applied; not a
+	/// backup at all; or a perfectly good backup that belongs to a
+	/// DIFFERENT universe than the active one — refused rather than
+	/// applied to the wrong watch order (Decision 1C).</summary>
+	public enum ImportResult { Ok, NotABackup, WrongUniverse }
+
+	/// <summary>Replace progress from a backup. Anything but Ok —
+	/// changes nothing: the text isn't a valid backup (schema or
+	/// version wrong, oversized, or unparseable), or it belongs to
+	/// another universe.</summary>
+	public ImportResult ImportStateJson(string json)
 	{
-		if (string.IsNullOrWhiteSpace(json)) return false;
-		if (Encoding.UTF8.GetByteCount(json) > BoundedRead.ImportCapBytes) return false;
+		if (string.IsNullOrWhiteSpace(json)) return ImportResult.NotABackup;
+		if (Encoding.UTF8.GetByteCount(json) > BoundedRead.ImportCapBytes) return ImportResult.NotABackup;
 
 		JsonDocument doc;
 		try { doc = JsonDocument.Parse(json); }
-		catch { return false; }
+		catch { return ImportResult.NotABackup; }
 		using (doc)
 		{
 			var root = doc.RootElement;
-			if (root.ValueKind != JsonValueKind.Object) return false;
+			if (root.ValueKind != JsonValueKind.Object) return ImportResult.NotABackup;
 			bool versioned = root.TryGetProperty("version", out _)
 				|| root.TryGetProperty("format", out _);
 			return versioned ? ImportVersioned(root) : ImportLegacy(json);
 		}
 	}
 
-	private bool ImportVersioned(JsonElement root)
+	private ImportResult ImportVersioned(JsonElement root)
 	{
 		if (!root.TryGetProperty("format", out var format)
 			|| format.ValueKind != JsonValueKind.String
-			|| format.GetString() != "onechicago-progress") return false;
+			|| format.GetString() != "onechicago-progress") return ImportResult.NotABackup;
 		if (!root.TryGetProperty("version", out var version)
 			|| version.ValueKind != JsonValueKind.Number
-			|| !version.TryGetInt32(out var v) || v != 1) return false;
+			|| !version.TryGetInt32(out var v) || v != 1) return ImportResult.NotABackup;
 		if (!root.TryGetProperty("watched", out var watchedEl)
-			|| watchedEl.ValueKind != JsonValueKind.Array) return false;
+			|| watchedEl.ValueKind != JsonValueKind.Array) return ImportResult.NotABackup;
+
+		// Which universe is this backup FOR? Backups exported by
+		// multi-universe builds carry the field; v1 backups predate
+		// it and are the launch universe's by definition (it was
+		// the only universe they could be exported from). A backup
+		// applies ONLY to its own universe — importing another
+		// universe's backup here is refused, changing nothing.
+		var backupUniverse = root.TryGetProperty("universe", out var universeEl)
+			&& universeEl.ValueKind == JsonValueKind.String
+			? universeEl.GetString()
+			: UniverseCatalogue.DefaultId;
+		if (backupUniverse != ActiveUniverseId) return ImportResult.WrongUniverse;
 
 		var validKeys = Episodes.Select(e => e.Key).ToHashSet();
 		var watched = new HashSet<string>();
@@ -998,7 +1220,7 @@ public class Store
 				BackgroundModeEnabled = bg.GetBoolean();
 		}
 		SaveSettings();
-		return true;
+		return ImportResult.Ok;
 	}
 
 	/// <summary>Legacy backups (the pre-production format was the
@@ -1008,8 +1230,10 @@ public class Store
 	/// only if it passes the same validation as everywhere else; the
 	/// last-started position is bounded to a plausible range. Any
 	/// leftover fields in the old file (including the removed test-ID
-	/// field) are ignored by deserialization.</summary>
-	private bool ImportLegacy(string json)
+	/// field) are ignored by deserialization. Legacy backups predate
+	/// universes entirely: they are the launch universe's, so they
+	/// apply only while it is active.</summary>
+	private ImportResult ImportLegacy(string json)
 	{
 		StateFile? state;
 		try
@@ -1018,9 +1242,10 @@ public class Store
 		}
 		catch
 		{
-			return false;
+			return ImportResult.NotABackup;
 		}
-		if (state == null || state.Watched == null) return false;
+		if (state == null || state.Watched == null) return ImportResult.NotABackup;
+		if (ActiveUniverseId != UniverseCatalogue.DefaultId) return ImportResult.WrongUniverse;
 
 		var validKeys = Episodes.Select(e => e.Key).ToHashSet();
 		_watched.Clear();
@@ -1035,23 +1260,27 @@ public class Store
 		PollSeconds = IsValidPollSeconds(state.PollSeconds) ? state.PollSeconds : DefaultPollSeconds;
 		LastStartedEpisodeKey = state.LastStartedEpisodeKey != null && validKeys.Contains(state.LastStartedEpisodeKey)
 			? state.LastStartedEpisodeKey : "";
-		LastStartedPositionMs = state.LastStartedPositionMs is >= 0 and <= 86_400_000 ? state.LastStartedPositionMs : 0;
-		_lastPositionSavedAtMs = LastStartedPositionMs;
+		long legacyPosition = state.LastStartedPositionMs ?? 0;
+		LastStartedPositionMs = legacyPosition is >= 0 and <= 86_400_000 ? legacyPosition : 0;
+		LastPositionSavedAtMs = LastStartedPositionMs;
 		AutoplayEnabled = state.AutoplayEnabled ?? true;
 		AutoplayCountdownSeconds = state.AutoplayCountdownSeconds is int cd && IsValidCountdownSeconds(cd)
 			? cd
 			: DefaultCountdownSeconds;
 		ThemeId = !string.IsNullOrWhiteSpace(state.ThemeId) && state.ThemeId.Length <= 50 ? state.ThemeId : "light";
 		ApplyOptionalSettings(state);
+		// The legacy file's refresh timestamps are the launch
+		// universe's (per-universe since Decision 1C; the gate
+		// above guarantees the launch universe is active here).
+		DataUpdatedAt = ParseTimestamp(state.DataUpdatedAt);
+		DataRefreshAttemptedAt = ParseTimestamp(state.DataRefreshAttemptedAt);
 
 		foreach (var ep in Episodes) ep.Watched = _watched.Contains(ep.Key);
-		// Re-resolve every ID through the layers (dataset, fetched
-		// source, the backup's overrides), mirroring first load.
-		// The fetched source layer itself is not part of any backup
-		// and is untouched by import.
+		// Re-resolve every ID through the layers (dataset, then the
+		// backup's overrides), mirroring first load.
 		ApplyPrimeIds();
 		SaveSettings();
-		return true;
+		return ImportResult.Ok;
 	}
 
 	/// <summary>"Start over": wipe the state file and reproduce a
@@ -1062,29 +1291,27 @@ public class Store
 	public async Task ClearAllAsync()
 	{
 		if (File.Exists(StatePath)) File.Delete(StatePath);
-		// A first install has no refreshed device dataset either —
-		// back to the APK-embedded seed.
-		if (File.Exists(DataPath)) File.Delete(DataPath);
-		// Nor a fetched episode-links layer or its address.
-		if (File.Exists(SourceLinksPath)) File.Delete(SourceLinksPath);
+		// A first install has no refreshed device datasets either —
+		// back to the APK-embedded seeds: every universe's copy
+		// goes, including the pre-multi-universe universe-less one.
+		if (File.Exists(LegacyDataPath)) File.Delete(LegacyDataPath);
+		foreach (var u in UniverseCatalogue.All)
+		{
+			var path = DataPathFor(u.Id);
+			if (File.Exists(path)) File.Delete(path);
+		}
 
-		using var stream = await FileSystem.OpenAppPackageFileAsync("episodes.json");
-		using var reader = new StreamReader(stream);
-		var json = await reader.ReadToEndAsync();
-		Episodes = DatasetFile.Parse(json, DatasetUniverseId) ?? new();
+		// Every universe's progress goes with the state file: fresh
+		// UniverseData all round, every built-in universe included,
+		// the launch universe active — the fresh-install universe
+		// state (Decision 1C).
+		_universes.Clear();
+		_included.Clear();
+		foreach (var u in UniverseCatalogue.All) _included.Add(u.Id);
+		ActiveUniverseId = UniverseCatalogue.DefaultId;
 
-		_watched.Clear();
-		_primeIds.Clear();
-		_sourceLinks.Clear();
-		SourceLinksUrl = "";
-		SourceLinksAppliedCount = 0;
-		SourceLinksIgnoredCount = 0;
-		SourceLinksFetchedAt = null;
 		TvIp = DefaultTvIp;
 		PollSeconds = DefaultPollSeconds;
-		LastStartedEpisodeKey = "";
-		LastStartedPositionMs = 0;
-		_lastPositionSavedAtMs = -1;
 		AutoplayEnabled = true;
 		AutoplayCountdownSeconds = DefaultCountdownSeconds;
 		ThemeId = "light";
@@ -1094,16 +1321,14 @@ public class Store
 		AutoplaySessionLimit = 0;
 		BackgroundModeEnabled = true;
 		NotificationPromptDone = false;
-		DataUpdatedAt = null;
-		DataRefreshAttemptedAt = null;
 		// A first install has not done setup — start-over returns to
 		// exactly that state (Decision 7).
 		SetupCompleted = false;
 
-		_datasetIds.Clear();
-		foreach (var ep in Episodes) _datasetIds[ep.Key] = ep.PrimeContentId;
-		foreach (var ep in Episodes) ep.Watched = _watched.Contains(ep.Key);
-		ApplyPrimeIds();
+		// Reload the (now active) launch universe from its seed;
+		// the loader materializes its empty watched set and shipped
+		// IDs onto the rows.
+		await LoadUniverseDatasetAsync(ActiveUniverseId);
 		SaveSettings();
 	}
 
