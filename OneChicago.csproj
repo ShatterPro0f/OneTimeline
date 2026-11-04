@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0-android</TargetFramework>
+		<RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>OneChicago</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- Display name -->
+		<ApplicationTitle>One Timeline</ApplicationTitle>
+
+		<!-- App Identifier -->
+		<ApplicationId>app.onetimeline</ApplicationId>
+
+		<!-- Versions -->
+		<ApplicationDisplayVersion>1.9.1</ApplicationDisplayVersion>
+		<ApplicationVersion>12</ApplicationVersion>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- App Icon -->
+		<MauiIcon Include="Resources\AppIcon\appicon.png" />
+
+		<!-- Splash Screen -->
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#101418" BaseSize="128,128" />
+
+		<!-- Images -->
+		<MauiImage Include="Resources\Images\*" />
+
+		<!-- Raw Assets (also remove the "Resources\Raw" prefix).
+		     episodes.json lands in the APK with logical name "episodes.json". -->
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<!-- Production (Google Play): an App Bundle, not a sideload APK.
+		     Sam's personal build keeps AndroidPackageFormat=apk. -->
+		<AndroidPackageFormat>aab</AndroidPackageFormat>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
+	</ItemGroup>
+
+</Project>

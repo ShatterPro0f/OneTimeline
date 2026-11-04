@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="OneChicago.Pages.TrackerPage"
+             Title="One Timeline"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="{DynamicResource ThPageBg}">
+
+    <CollectionView x:Name="EpisodeList" SelectionMode="None" BackgroundColor="{DynamicResource ThPageBg}">
+        <CollectionView.Header>
+            <VerticalStackLayout Padding="20,20,20,0">
+
+                <!-- Title row + settings gear -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label x:Name="PageTitle" Text="One Timeline" FontSize="32" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                    <Button Grid.Column="1" x:Name="GearButton" Text="⚙︎" FontSize="22" TextColor="{DynamicResource ThAccent}"
+                            BackgroundColor="Transparent" Padding="6" Clicked="OnOpenSettings" VerticalOptions="Center" />
+                </Grid>
+                <Label x:Name="ProgressLabel" TextColor="{DynamicResource ThText2}" FontSize="14" Margin="0,2,0,6" />
+                <!-- Overall watch-through progress (iteration 7): one thin
+                     bar under the count line — no card, nothing else. -->
+                <ProgressBar x:Name="OverallProgress" ProgressColor="{DynamicResource ThAccent}" BackgroundColor="{DynamicResource ThProgressTrack}" Margin="0,0,0,18" />
+
+                <!-- Auto check-off notice -->
+                <Border x:Name="AutoCheckBanner" BackgroundColor="{DynamicResource ThBannerBg}" StrokeThickness="0" Padding="14,10" Margin="0,0,0,14" IsVisible="False">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="12" />
+                    </Border.StrokeShape>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label x:Name="AutoCheckText" TextColor="{DynamicResource ThBannerText}" FontSize="14" VerticalOptions="Center" />
+                        <Button Grid.Column="1" Text="Undo" Clicked="OnUndoAutoCheck" BackgroundColor="Transparent" TextColor="{DynamicResource ThAccent}" FontAttributes="Bold" Padding="8,0" />
+                    </Grid>
+                </Border>
+
+                <!-- WATCH NOW hero -->
+                <Border x:Name="HeroCard" BackgroundColor="{DynamicResource ThCardBg}" Stroke="{DynamicResource ThCardStroke}" StrokeThickness="1" Padding="20">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="16" />
+                    </Border.StrokeShape>
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Opacity="0.07" Radius="12" Offset="0,2" />
+                    </Border.Shadow>
+                    <VerticalStackLayout Spacing="6">
+                        <!-- Tappable header: title/meta/description area opens
+                             the current episode's details, like any other row.
+                             The buttons below live OUTSIDE this layout, so their
+                             taps can never trigger the card tap. -->
+                        <VerticalStackLayout x:Name="HeroHeader" Spacing="6">
+                            <VerticalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnHeroCardTapped" />
+                            </VerticalStackLayout.GestureRecognizers>
+                            <!-- Tri-stripe accent bar (One Chicago theme; card-coloured = invisible elsewhere) -->
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="0" Margin="-20,-20,-20,14">
+                                <BoxView HeightRequest="3" BackgroundColor="{DynamicResource ThStripe1}" />
+                                <BoxView Grid.Column="1" HeightRequest="3" BackgroundColor="{DynamicResource ThStripe2}" />
+                                <BoxView Grid.Column="2" HeightRequest="3" BackgroundColor="{DynamicResource ThStripe3}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="WATCH NOW" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThAccent}" CharacterSpacing="1.2" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="›" TextColor="{DynamicResource ThChevron}" FontSize="20" VerticalOptions="Center" />
+                            </Grid>
+                            <Label x:Name="HeroShow" FontSize="16" TextColor="{DynamicResource ThText2}" Margin="0,4,0,0" />
+                            <Label x:Name="HeroTitle" FontSize="26" FontAttributes="Bold" TextColor="{DynamicResource ThText}" LineBreakMode="WordWrap" />
+                            <Label x:Name="HeroMeta" FontSize="14" TextColor="{DynamicResource ThText2}" />
+                            <HorizontalStackLayout>
+                                <Border x:Name="HeroEventPill" BackgroundColor="{DynamicResource ThPillBg}" StrokeThickness="0" Padding="8,3" IsVisible="False">
+                                    <Border.StrokeShape>
+                                        <RoundRectangle CornerRadius="8" />
+                                    </Border.StrokeShape>
+                                    <Label x:Name="HeroEventPillText" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThPillText}" />
+                                </Border>
+                            </HorizontalStackLayout>
+                            <!-- Crossover context (iteration 7): EXACTLY ONE slim
+                                 line when the current episode belongs to an event
+                                 — no card, no list, no buttons. -->
+                            <Label x:Name="HeroEventLine" FontSize="13" TextColor="{DynamicResource ThText2}" IsVisible="False" />
+                            <Label x:Name="HeroDescription" FontSize="15" TextColor="{DynamicResource ThBody}" MaxLines="3" LineBreakMode="TailTruncation" />
+                            <Label x:Name="HeroDescCredit" Text="Description from TVmaze · CC BY-SA" FontSize="11" TextColor="{DynamicResource ThText3}" IsVisible="False" />
+                        </VerticalStackLayout>
+                        <Label x:Name="HeroLiveLabel" FontSize="14" FontAttributes="Bold" TextColor="{DynamicResource ThAccent}" IsVisible="False" Margin="0,6,0,0" />
+                        <ProgressBar x:Name="HeroProgress" ProgressColor="{DynamicResource ThAccent}" BackgroundColor="{DynamicResource ThProgressTrack}" IsVisible="False" />
+                        <Label x:Name="HeroAutoplayLabel" FontSize="15" FontAttributes="Bold" TextColor="{DynamicResource ThText}" IsVisible="False" Margin="0,8,0,0" />
+                        <Button x:Name="CancelAutoplayButton" Text="Cancel" Clicked="OnCancelAutoplay"
+                                BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThBtn2Text}" CornerRadius="10" HeightRequest="40" IsVisible="False" />
+                        <Button x:Name="PlayNowButton" Text="▶ Play Now" Clicked="OnPlayNow"
+                                BackgroundColor="{DynamicResource ThAccent}" TextColor="{DynamicResource ThAccentText}" FontSize="17" FontAttributes="Bold"
+                                CornerRadius="12" HeightRequest="52" Margin="0,10,0,0" />
+                        <!-- Skip (iteration 7): a discreet text button under the
+                             hero button. "Next episode ⏭" while something is
+                             playing/paused on the TV; "Skip this episode" when
+                             the current episode has no Prime link — the way
+                             past episodes that can't be started at all. -->
+                        <Button x:Name="SkipButton" Text="Next episode ⏭" Clicked="OnSkipNext" IsVisible="False"
+                                BackgroundColor="Transparent" TextColor="{DynamicResource ThAccent}" FontSize="15"
+                                HeightRequest="40" Padding="0" />
+                        <Label x:Name="HeroVerdict" FontSize="14" FontAttributes="Bold" IsVisible="False" Margin="0,6,0,0" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- UP NEXT -->
+                <Label Text="UP NEXT" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,8" />
+                <Border x:Name="UpNextCard" BackgroundColor="{DynamicResource ThCardBg}" Stroke="{DynamicResource ThCardStroke}" StrokeThickness="1" Padding="0">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="16" />
+                    </Border.StrokeShape>
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Opacity="0.07" Radius="12" Offset="0,2" />
+                    </Border.Shadow>
+                    <VerticalStackLayout x:Name="UpNextList" />
+                </Border>
+
+                <!-- WATCH ORDER -->
+                <Label Text="WATCH ORDER" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,8" />
+                <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0" Margin="0,0,0,6">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10" />
+                    </Border.StrokeShape>
+                    <Entry x:Name="SearchEntry" Placeholder="Search episodes" PlaceholderColor="{DynamicResource ThText3}"
+                           TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="15"
+                           TextChanged="OnSearchChanged" ClearButtonVisibility="WhileEditing" />
+                </Border>
+
+            </VerticalStackLayout>
+        </CollectionView.Header>
+
+        <CollectionView.EmptyView>
+            <Label Text="No episodes match your search." TextColor="{DynamicResource ThText3}" FontSize="15"
+                   HorizontalOptions="Center" Margin="0,24,0,0" />
+        </CollectionView.EmptyView>
+
+        <CollectionView.ItemTemplate>
+            <DataTemplate>
+                <VerticalStackLayout BackgroundColor="{Binding RowBackground}">
+                    <Grid ColumnDefinitions="32,*,Auto" Padding="20,12,16,12">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnRowTapped" />
+                        </Grid.GestureRecognizers>
+                        <Label Text="{Binding CheckText}" TextColor="{DynamicResource ThCheck}" FontSize="17" FontAttributes="Bold" VerticalOptions="Center" />
+                        <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                            <Label Text="{Binding Title}" FontSize="16" TextColor="{Binding TitleColor}" MaxLines="1" LineBreakMode="TailTruncation" />
+                            <Label FormattedText="{Binding SubFormatted}" FontSize="13" />
+                            <Label Text="{Binding EventPill}" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThPillText}" IsVisible="{Binding HasEvent}" />
+                        </VerticalStackLayout>
+                        <Label Grid.Column="2" Text="›" TextColor="{DynamicResource ThChevron}" FontSize="20" VerticalOptions="Center" />
+                    </Grid>
+                    <BoxView HeightRequest="0.5" BackgroundColor="{DynamicResource ThHairline}" Margin="20,0,0,0" />
+                </VerticalStackLayout>
+            </DataTemplate>
+        </CollectionView.ItemTemplate>
+
+        <CollectionView.Footer>
+            <BoxView HeightRequest="24" BackgroundColor="{DynamicResource ThPageBg}" />
+        </CollectionView.Footer>
+    </CollectionView>
+</ContentPage>

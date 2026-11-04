@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<!-- ECP is plain HTTP on the home LAN, so cleartext traffic must be allowed. -->
+	<application android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true">
+		<!-- Background mode: the foreground service that keeps TV
+		     monitoring + autoplay alive off-screen. connectedDevice
+		     type (production Decision 4): the service continuously
+		     interacts with an external device — the TV — over the
+		     home network. The type's runtime prerequisite is the
+		     multicast-state declaration below, and it is used for
+		     real: Find My TV holds a Wi-Fi multicast lock while its
+		     SSDP search listens (see RokuFinder). stopWithTask=
+		     false so swiping the app from recents does not stop it. -->
+		<service android:name="com.shatterpro0f.onechicago.MonitorService"
+		         android:exported="false"
+		         android:stopWithTask="false"
+		         android:foregroundServiceType="connectedDevice" />
+	</application>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.INTERNET" />
+	<!-- Background mode: foreground service + its type permission
+	     and the mandatory visible notification. Production ships
+	     no direct battery-exemption request (Decision 5): Settings
+	     shows written instructions pointing at the system battery
+	     settings instead. -->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+	<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+	<!-- No wake-lock permission in production: the partial wake
+	     lock was personal-build diagnostic heritage (iteration
+	     9.1), removed with its helper class in the setup/data
+	     pass. Nothing in the production build holds the CPU
+	     awake; the service relies on its foreground-service
+	     status alone. -->
+</manifest>

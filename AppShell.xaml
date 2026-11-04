@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="OneChicago.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:OneChicago"
+    xmlns:pages="clr-namespace:OneChicago.Pages"
+    Shell.FlyoutBehavior="Disabled"
+    Title="One Timeline">
+
+    <!-- One clean page. Episode details and Settings are pushed onto
+         the navigation stack from it; there are no tabs any more. -->
+    <ShellContent
+        Title="One Timeline"
+        ContentTemplate="{DataTemplate pages:TrackerPage}"
+        Route="TrackerPage" />
+
+</Shell>

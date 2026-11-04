@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Legacy (pre-Android 12) full-backup counterpart of
+     data_extraction_rules.xml: same exclusions. -->
+<full-backup-content>
+	<exclude domain="file" path="progress.json" />
+	<exclude domain="file" path="episodes.refreshed.json" />
+</full-backup-content>

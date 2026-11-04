@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pages="clr-namespace:OneChicago.Pages"
+             x:Class="OneChicago.Pages.SettingsPage"
+             Title="Settings"
+             BackgroundColor="{DynamicResource ThPageBg}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="8">
+
+            <!-- TV -->
+            <Label Text="TV" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,8,0,2" />
+            <Label Text="TV address" FontSize="15" TextColor="{DynamicResource ThText}" />
+            <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10" />
+                </Border.StrokeShape>
+                <Entry x:Name="IpEntry" Placeholder="Your TV's IP address" PlaceholderColor="{DynamicResource ThText3}"
+                       TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="16" Keyboard="Url" />
+            </Border>
+            <Button x:Name="CheckButton" Text="Check connection" Clicked="OnCheckConnection"
+                    BackgroundColor="{DynamicResource ThAccent}" TextColor="{DynamicResource ThAccentText}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,6,0,0" />
+            <Label x:Name="CheckResultLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" />
+            <Button x:Name="FindTvButton" Text="Find my TV" Clicked="OnFindTv"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,2,0,0" />
+            <Label x:Name="FindStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" />
+            <VerticalStackLayout x:Name="FoundList" Spacing="0" />
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Label Text="TV asks for a profile" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Switch Grid.Column="1" x:Name="ProfileSwitch" Toggled="OnProfileToggled" VerticalOptions="Center" />
+            </Grid>
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="After opening Prime, the Play sequence taps Select to pick the highlighted profile. Turn this off if your TV goes straight into Prime without asking." />
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Label Text="TV check interval" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                    <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0" WidthRequest="84">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="10" />
+                        </Border.StrokeShape>
+                        <Entry x:Name="PollEntry" Keyboard="Numeric" HorizontalTextAlignment="End"
+                               TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="16"
+                               Completed="OnPollEntryCompleted" Unfocused="OnPollEntryUnfocused"
+                               SemanticProperties.Description="TV check interval in seconds" />
+                    </Border>
+                    <Label Text="seconds" FontSize="16" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Grid>
+            <Label x:Name="PollHintLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False"
+                   Text="Enter 10–300 seconds" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="How often the app asks the TV what it's doing while nothing is playing. While an episode is playing, the app already checks every second — this only sets the pace for the quiet times." />
+
+            <!-- SETUP -->
+            <Label Text="SETUP" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Button x:Name="RunSetupButton" Text="Run setup again" Clicked="OnRunSetup"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Revisit the first-run setup: your starting point in the watch order, the TV connection, and how Prime Video links work. (Short version: open an episode in Prime Video, tap Share → Copy link, then paste it on that episode's page here — under “Your Prime Video link”.)" />
+
+            <!-- EPISODE LINKS SOURCE (shared with Setup) -->
+            <pages:SourcesSection x:Name="LinksSection" />
+
+            <!-- AUTOPLAY -->
+            <Label Text="AUTOPLAY" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Grid ColumnDefinitions="*,Auto" Padding="0,4">
+                <Label Text="Play the next episode automatically" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Switch Grid.Column="1" x:Name="AutoplaySwitch" Toggled="OnAutoplayToggled" VerticalOptions="Center" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Label Text="Autoplay countdown" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                    <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0" WidthRequest="84">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="10" />
+                        </Border.StrokeShape>
+                        <Entry x:Name="CountdownEntry" Keyboard="Numeric" HorizontalTextAlignment="End"
+                               TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="16"
+                               Completed="OnCountdownEntryCompleted" Unfocused="OnCountdownEntryUnfocused"
+                               SemanticProperties.Description="Autoplay countdown in seconds" />
+                    </Border>
+                    <Label Text="seconds" FontSize="16" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Grid>
+            <Label x:Name="CountdownHintLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False"
+                   Text="Enter 0–600 seconds" />
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSessionLimitRowTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Stop autoplay after" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label Grid.Column="1" x:Name="SessionLimitValueLabel" FontSize="16" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnCreditsRowTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Episode endings" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label Grid.Column="1" x:Name="CreditsValueLabel" FontSize="16" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="“Episode endings” decides when an episode counts as finished: Balanced uses the full episode plus its ending; Jump early moves on sooner; Let credits play waits for playback to actually end." />
+
+            <Label x:Name="AutoplayNoteLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,6,0,0" />
+
+            <!-- BACKGROUND MODE -->
+            <Label Text="BACKGROUND MODE" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Grid ColumnDefinitions="*,Auto" Padding="0,4">
+                <Label Text="Keep watching in the background" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Switch Grid.Column="1" x:Name="BackgroundSwitch" Toggled="OnBackgroundToggled" VerticalOptions="Center" />
+            </Grid>
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="While this is on, a small always-visible notification keeps the app watching the TV after you leave it — episode endings, check-offs and autoplay all work the same as with the app open. The notification shows what's playing, with pause and next-episode buttons. Stop it any time from the notification itself. It starts when you open the app; after a phone restart, open the app once to start it again." />
+            <Label x:Name="NotificationStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" IsVisible="False" Margin="0,6,0,0" />
+            <Label x:Name="BatteryStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" Margin="0,6,0,0" IsVisible="False"
+                   Text="Battery: background watching works best when this app isn't battery-optimized — some phones, Samsung especially, otherwise put it to sleep mid-evening. On the app settings page, open Battery and choose “Unrestricted”." />
+            <Button x:Name="AppSettingsButton" Text="Open app settings" Clicked="OnOpenAppSettings" IsVisible="False"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,2,0,0" />
+
+            <!-- APPEARANCE -->
+            <Label Text="APPEARANCE" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <VerticalStackLayout x:Name="ThemeList" Spacing="0" />
+
+            <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
+                <Label Text="Hide descriptions until watched" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Switch Grid.Column="1" x:Name="SpoilerSwitch" Toggled="OnSpoilerToggled" VerticalOptions="Center" />
+            </Grid>
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Spoiler guard: descriptions of episodes you haven't watched are hidden until you tap to reveal them. Watched episodes always show theirs." />
+
+            <!-- BACKUP -->
+            <Label Text="BACKUP" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Button x:Name="ExportButton" Text="Export progress" Clicked="OnExport"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
+            <Button x:Name="ImportButton" Text="Import progress" Clicked="OnImport"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
+            <Button x:Name="StartOverButton" Text="Start over" Clicked="OnStartOver"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThPillText}" FontSize="16" CornerRadius="12" HeightRequest="48" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Export saves your watched episodes and settings as a small file you can keep. Import restores one of those files. Start over wipes everything and returns the app to a first install — nothing watched, setup offered again." />
+
+            <Label x:Name="DataLabel" FontSize="13" TextColor="{DynamicResource ThText3}" Margin="0,26,0,0" LineBreakMode="WordWrap" />
+            <Label x:Name="DataRefreshLabel" FontSize="13" TextColor="{DynamicResource ThText3}" Margin="0,2,0,0" LineBreakMode="WordWrap" IsVisible="False" />
+
+            <!-- ABOUT -->
+            <Label Text="ABOUT" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label x:Name="AboutLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
+                   Text="Episode descriptions are provided by TVmaze and used under the CC BY-SA licence. This app is an independent watch-order tracker. It is not affiliated with, endorsed by, or sponsored by NBC, NBCUniversal, Wolf Entertainment, Roku, or Amazon — show titles are used only to identify the episodes." />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
+                   Text="Watch order is based on the community spreadsheet &quot;Chicago Franchise Episode Timeline (with Cameos)&quot;, created and maintained by its author and the contributors who keep it current — thank you. https://docs.google.com/spreadsheets/d/1d6nnW_I3qrWUujOXi1Db2717wUKX86J4wRZdGOYPDog" />
+            <Button x:Name="DiagnosticsButton" Text="Share diagnostics" Clicked="OnShareDiagnostics"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,8,0,0" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Builds a short summary of the app's state — no TV address, no device serial numbers, no full episode links, watch history as counts only — shows it to you first, and shares it only when you tap Share." />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

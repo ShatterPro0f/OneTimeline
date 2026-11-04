@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Production backup hygiene (audit 1.5): the user's viewing
+     history (progress.json) and the refreshed dataset cache
+     (episodes.refreshed.json) never leave the device via Android
+     backup — excluded from cloud backup AND from device-to-device
+     transfer. -->
+<data-extraction-rules>
+	<cloud-backup>
+		<exclude domain="file" path="progress.json" />
+		<exclude domain="file" path="episodes.refreshed.json" />
+	</cloud-backup>
+	<device-transfer>
+		<exclude domain="file" path="progress.json" />
+		<exclude domain="file" path="episodes.refreshed.json" />
+	</device-transfer>
+</data-extraction-rules>

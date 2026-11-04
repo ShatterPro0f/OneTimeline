@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pages="clr-namespace:OneChicago.Pages"
+             x:Class="OneChicago.Pages.SetupPage"
+             Title="Set up"
+             BackgroundColor="{DynamicResource ThPageBg}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="8">
+
+            <Label FontSize="15" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="A minute of setup — every step is optional, and everything here can be changed later in Settings." />
+
+            <!-- STARTING POINT -->
+            <Label Text="WHERE ARE YOU UP TO?" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,2" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="New to the shows? Start from the beginning. Already partway through? Pick the first episode you haven't watched — everything before it gets marked watched. Nothing is final: any episode can be re-marked from its page at any time." />
+            <Button x:Name="BeginningButton" Text="Start from the beginning" Clicked="OnStartFromBeginning"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,6,0,0" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText}" Text="Or pick where you left off:" Margin="0,10,0,0" />
+            <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0" Margin="0,2,0,0">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10" />
+                </Border.StrokeShape>
+                <Entry x:Name="StartingSearchEntry" Placeholder="Search episodes" PlaceholderColor="{DynamicResource ThText3}"
+                       TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="15"
+                       TextChanged="OnStartingSearchChanged" ClearButtonVisibility="WhileEditing" />
+            </Border>
+            <VerticalStackLayout x:Name="StartingResults" Spacing="0" />
+            <Label x:Name="StartingStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" Margin="0,4,0,0" />
+
+            <!-- TV CONNECTION -->
+            <Label Text="CONNECT YOUR TV (OPTIONAL)" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="The tracker works on its own. Connect a Roku TV if you want the app to start episodes and follow along as you watch. Your phone and the TV need to be on the same Wi-Fi, and the TV needs “Control by mobile apps” turned on (on the TV: Settings → System → Advanced system settings → Control by mobile apps)." />
+            <Label Text="TV address" FontSize="15" TextColor="{DynamicResource ThText}" Margin="0,6,0,0" />
+            <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10" />
+                </Border.StrokeShape>
+                <Entry x:Name="IpEntry" Placeholder="Your TV's IP address" PlaceholderColor="{DynamicResource ThText3}"
+                       TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="16" Keyboard="Url" />
+            </Border>
+            <Button x:Name="FindTvButton" Text="Find my TV" Clicked="OnFindTv"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,6,0,0" />
+            <Label x:Name="FindStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" />
+            <VerticalStackLayout x:Name="FoundList" Spacing="0" />
+            <Button x:Name="CheckButton" Text="Check connection" Clicked="OnCheckConnection"
+                    BackgroundColor="{DynamicResource ThAccent}" TextColor="{DynamicResource ThAccentText}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,2,0,0" />
+            <Label x:Name="CheckResultLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" />
+
+            <!-- PRIME VIDEO LINKS -->
+            <Label Text="PRIME VIDEO LINKS (OPTIONAL)" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="The One Chicago episodes come with their Prime Video links included, so Play works out of the box. You can still replace any single episode's link with your own: open the episode in the Prime Video app (or at primevideo.com), tap Share, then Copy link. Then open that episode in this app and paste the link under “Your Prime Video link”. Only the episode ID from your link is kept, and it never leaves this phone." />
+
+            <!-- EPISODE LINKS SOURCE (shared with Settings) -->
+            <pages:SourcesSection x:Name="LinksSection" />
+
+            <!-- FINISH -->
+            <Button x:Name="DoneButton" Text="Done" Clicked="OnDone"
+                    BackgroundColor="{DynamicResource ThAccent}" TextColor="{DynamicResource ThAccentText}" FontSize="17" FontAttributes="Bold"
+                    CornerRadius="12" HeightRequest="52" Margin="0,26,0,0" />
+            <Button x:Name="SkipButton" Text="Skip setup" Clicked="OnSkip"
+                    BackgroundColor="Transparent" TextColor="{DynamicResource ThAccent}" FontSize="15"
+                    HeightRequest="40" Padding="0" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" HorizontalTextAlignment="Center"
+                   Text="You can run setup again any time from Settings." />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

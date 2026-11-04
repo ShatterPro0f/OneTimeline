@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="OneChicago.Pages.DiagnosticsPage"
+             Title="Diagnostics"
+             BackgroundColor="{DynamicResource ThPageBg}">
+
+    <Grid RowDefinitions="*,Auto" Padding="20">
+        <ScrollView Grid.Row="0">
+            <Label x:Name="SnapshotLabel" FontSize="13" TextColor="{DynamicResource ThBody}" LineBreakMode="WordWrap" />
+        </ScrollView>
+        <VerticalStackLayout Grid.Row="1" Spacing="6" Margin="0,12,0,0">
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="This is exactly what gets shared — nothing else is collected, and nothing leaves this phone unless you tap Share." />
+            <Button x:Name="ShareButton" Text="Share" Clicked="OnShare"
+                    BackgroundColor="{DynamicResource ThAccent}" TextColor="{DynamicResource ThAccentText}" FontSize="17" FontAttributes="Bold"
+                    CornerRadius="12" HeightRequest="52" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>
