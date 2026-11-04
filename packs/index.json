@@ -26,6 +26,15 @@
       "file": "episodes-mcu.json",
       "sha256": "0816a8d0f1e68c52c5f852109fa8e9553d0a52904f35f2b69fe5c162099119cc",
       "dataVersion": 2
+    },
+    {
+      "id": "arrowverse",
+      "displayName": "Arrowverse",
+      "showsLine": "Arrow · The Flash · Supergirl · DC's Legends of Tomorrow · Batwoman · Black Lightning · Constantine · Superman & Lois",
+      "episodeCount": 765,
+      "file": "episodes-arrowverse.json",
+      "sha256": "efe739e4bc23aa50b1970bd620f2f1415dcb51d56c927462af9160e774fe7eba",
+      "dataVersion": 1
     }
   ]
 }
