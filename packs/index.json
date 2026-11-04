@@ -17,6 +17,15 @@
       "file": "episodes-csi.json",
       "sha256": "9a5256893463b6c7448d7ce9f9db8a35c509c793cd9a6b64886ee4dd3b347da2",
       "dataVersion": 1
+    },
+    {
+      "id": "mcu",
+      "displayName": "Marvel Cinematic Universe",
+      "showsLine": "Every film and live-action series — the Avengers, the Defenders, Agents of S.H.I.E.L.D. and the Disney+ originals — plus Special Presentations, One-Shots and web shorts",
+      "episodeCount": 555,
+      "file": "episodes-mcu.json",
+      "sha256": "9683e7b022fabce3998c0a534830550f8d97d22e6be46729bca5b3e278c3da14",
+      "dataVersion": 1
     }
   ]
 }
