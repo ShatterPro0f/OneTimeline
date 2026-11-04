@@ -850,11 +850,16 @@
    "airDate": "2002-05-09",
    "description": "Grissom and his crew handle their highest profile case to date when the city's former chief of detectives is slain execution-style in his house following a wild party. Missing from the residence are the chief's trophy wife and their 7-year-old daughter. When several motorists report seeing the girl along an access road near Miami, Catherine and Warrick fly there and meet that city's top CSI, Horatio Caine, who aids them in the investigation.",
    "runtimeMinutes": 47,
-   "cameos": [],
-   "eventKind": "crossover",
-   "eventIndex": 1,
-   "eventTotal": 1,
-   "eventGroup": "cross-jurisdictions",
+   "cameos": [
+    {
+     "show": "CSI: Miami",
+     "names": "Horatio Caine, Calleigh Duquesne, Eric Delko, Tim Speedle, Alexx Woods"
+    }
+   ],
+   "eventKind": null,
+   "eventIndex": null,
+   "eventTotal": null,
+   "eventGroup": null,
    "primeContentId": "amzn1.dv.gti.922e46db-663a-4519-b5a1-1a419ad147b2"
   },
   {
@@ -2617,11 +2622,16 @@
    "airDate": "2004-05-17",
    "description": "When a teenage girl returns home from a big party night at an underage nightclub to find her parents murdered, the search for the killer leads Horatio to New York City. Before he arrives, the New York detectives, led by Detective Mac Taylor, are called out to investigate the shooting of an undercover police officer—who, it turns out, is the lead suspect in the Miami case. However, the medical examiner determines that he has been dead for 72 hours and could not even have been alive at the time of the double-murder in Miami. After further investigation, Horatio and Mac determine that the real killer murdered the New York cop, then used his ID to get to Miami, and is still on the loose. This was the pilot episode for CSI: NY .",
    "runtimeMinutes": 45,
-   "cameos": [],
-   "eventKind": "crossover",
-   "eventIndex": 1,
-   "eventTotal": 1,
-   "eventGroup": "mia-nyc-nonstop",
+   "cameos": [
+    {
+     "show": "CSI: NY",
+     "names": "Mac Taylor, Stella Bonasera, Danny Messer, Aiden Burn, Sheldon Hawkes"
+    }
+   ],
+   "eventKind": null,
+   "eventIndex": null,
+   "eventTotal": null,
+   "eventGroup": null,
    "primeContentId": "amzn1.dv.gti.8b9befcf-af20-47ad-8e2f-193d543507f2"
   },
   {
@@ -2921,7 +2931,12 @@
    "airDate": "2004-10-27",
    "description": "The detectives investigate murders of a DJ during a turntable contest and a successful fashion designer found in her swimming pool.",
    "runtimeMinutes": 41,
-   "cameos": [],
+   "cameos": [
+    {
+     "show": "CSI",
+     "names": "Disco Placid"
+    }
+   ],
    "eventKind": null,
    "eventIndex": null,
    "eventTotal": null,
@@ -14174,11 +14189,16 @@
    "airDate": "2014-04-30",
    "description": "The CSIs investigate the cyber-related murder of a prominent casino owner's wife and receive help from the FBI's Cyber Crime Division.",
    "runtimeMinutes": 44,
-   "cameos": [],
-   "eventKind": "crossover",
-   "eventIndex": 1,
-   "eventTotal": 1,
-   "eventGroup": "kitty",
+   "cameos": [
+    {
+     "show": "CSI: Cyber",
+     "names": "Avery Ryan"
+    }
+   ],
+   "eventKind": null,
+   "eventIndex": null,
+   "eventTotal": null,
+   "eventGroup": null,
    "primeContentId": "amzn1.dv.gti.bc3b23be-944f-49d8-bb75-46fc755a8a80"
   },
   {
@@ -14307,7 +14327,12 @@
    "airDate": "2014-11-16",
    "description": "Frustration mounts for the CSI team as another victim surfaces and all evidence points to the Gig Harbor Killer.",
    "runtimeMinutes": 43,
-   "cameos": [],
+   "cameos": [
+    {
+     "show": "CSI: Cyber",
+     "names": "Avery Ryan"
+    }
+   ],
    "eventKind": null,
    "eventIndex": null,
    "eventTotal": null,

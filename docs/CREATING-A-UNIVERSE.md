@@ -49,13 +49,15 @@ A universe is one JSON file with this envelope:
 | `runtimeMinutes` | No | The episode's **true content runtime** in minutes (see the warning below). |
 | `description` | No | A short episode synopsis. Only include descriptions you have the right to use, and credit their source in your sources document (the Chicago pack's are TVmaze's, CC BY-SA, and are credited in the app). |
 | `primeContentId` | No | The episode's Prime Video content ID (`amzn1.dv.gti.…`). Episodes with one get a working Play button; episodes without one simply don't. |
-| `eventGroup` | No | An ID shared by every episode in one crossover or multi-part event, e.g. `crossover-2016-winter`. Leave null/absent for standalone episodes. |
+| `eventGroup` | No | An ID shared by every episode in one crossover or multi-part event, e.g. `crossover-2016-winter`. Only for a story told across **2 or more episodes** (see the event rule below). Leave null/absent for standalone episodes. |
 | `eventKind` | No | `crossover` or `multi-part` — set on every episode in the group. |
 | `eventIndex` | No | This episode's position **within its event group** (1-based). |
-| `eventTotal` | No | How many episodes the event group has in total. |
+| `eventTotal` | No | How many episodes the event group has in total. **Must be ≥ 2** — a group of one is not an event (see the event rule below). |
 | `cameos` | No | Notable guest appearances as short strings, e.g. `["Trask (SVU)"]`. Factual appearance data only. |
 
 **Runtime warning.** `runtimeMinutes` must be the length of the episode itself (≈42 minutes for an hour-long drama), **not** the broadcast slot length (60). The app judges episode endings against this number; slot lengths silently break end detection. If you don't have true runtimes, omit the field rather than guessing.
+
+**Event rule.** Event groups are only for **one story told across two or more episodes**. A single episode that features another show's characters — including a **backdoor pilot** that introduces a future series, whose story opens and closes inside its own episode — is a `cameos` entry on that episode, **never** a one-part event. `eventTotal` 1 renders in the app as "Part 1 of 1", which is nonsense. (This rule is written down because the CSI pack's first version shipped three backdoor pilots as one-episode events; an audit converted them to cameos, and the pack's validation now rejects any one-episode group.)
 
 ### Ordering rules
 

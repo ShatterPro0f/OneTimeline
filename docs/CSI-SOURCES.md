@@ -2,7 +2,7 @@
 
 This document accounts for **every kind of data** in the CSI universe pack: where it was found, how it was obtained, its licence or terms position, and what the app does with it. It follows the standard set by [ONE-CHICAGO-SOURCES.md](ONE-CHICAGO-SOURCES.md), per the rule in [CREATING-A-UNIVERSE.md](CREATING-A-UNIVERSE.md): a universe ships in the release package only with a document like this one.
 
-**The pack in numbers:** 839 episodes · 803 with Prime Video links · 839 with descriptions · 839 with true runtimes · 12 episodes flagged as part of a crossover event · 1 cameo entry.
+**The pack in numbers:** 839 episodes · 803 with Prime Video links · 839 with descriptions · 839 with true runtimes · 9 episodes flagged as part of a crossover event · 6 episodes carrying cameo annotations.
 
 The data was assembled by two build scripts, included in this repository under `tools/` so the pack can be rebuilt and audited: `build_csi_episodes.py` (spreadsheet + TVmaze) and `fetch_csi_ids.py` (Prime Video matching). A full research report on this pack's sources was written before the build (`csi-research.md` in the maintainer's records); the findings that matter are repeated here.
 
@@ -41,20 +41,32 @@ The data was assembled by two build scripts, included in this repository under `
 - **One honest caveat:** that a Paramount+ channel ID deep-links through the app's Prime-on-Roku path the same way a base-Prime ID does is **inferred from the identical ID format, not yet device-tested**. The IDs are genuine Prime Video content identifiers; the first on-device play from this pack is the test.
 - **How the app uses them:** a content ID is what the app hands to the TV to open that exact episode in Prime Video (and to resume it). A runtime is used only for end-of-episode detection during background watching. Neither is displayed as data in the app.
 
-## 4. Crossover events and the cameo entry — derived from the franchise record
+## 4. Crossover events and cameo annotations — derived from the franchise record
 
-- **Source:** the sheet in §1 has no notes, so event membership and story order come from the franchise record — Wikipedia's episode and event articles ("Cross Jurisdictions", "MIA/NYC NonStop", "CSI: Trilogy", "Kitty", "Immortality", the *CSI* season 8/13/14 and *Without a Trace* season 6 articles), cross-checked against TVmaze and the sheet's own dates and positions.
-- **What was derived:** seven crossover events, **12 episodes** flagged in total. In every case the story order equals the broadcast order, and the sheet already sequences the parts consecutively:
-  1. **Cross Jurisdictions** — *CSI* S2E22, the *CSI: Miami* backdoor pilot (Horatio Caine introduced).
-  2. **MIA/NYC NonStop** — *CSI: Miami* S2E23, the *CSI: NY* backdoor pilot (Mac Taylor introduced).
-  3. **Felony Flight → Manhattan Manhunt** — *CSI: Miami* S4E7 → *CSI: NY* S2E7.
-  4. **Who & What → Where and Why** — *CSI* S8E6 → *Without a Trace* S6E6 (the event that brings the pack's one guest episode in).
-  5. **CSI: Trilogy** — *CSI: Miami* S8E7 "Bone Voyage" → *CSI: NY* S6E7 "Hammer Down" → *CSI* S10E7 "The Lost Girls".
-  6. **In Vino Veritas → Seth and Apep** — *CSI* S13E13 → *CSI: NY* S9E15.
-  7. **Kitty** — *CSI* S14E21, the *CSI: Cyber* backdoor pilot (Avery Ryan introduced).
-- **The cameo entry:** *CSI: NY* S3E22 **"Cold Reveal"** carries a cameo annotation for **Scotty Valens (*Cold Case*)** — Danny Pino appears in character, inside a NY episode. That one-way appearance is *Cold Case*'s only on-screen connection to the family; no *Cold Case* episode is a crossover, which is why the series is excluded but the appearance is recorded — the same treatment the Chicago pack gives guest characters.
-- **Deliberately NOT flagged:** "Two and a Half Deaths" (*CSI* S8E16) contains *Two and a Half Men* writer/actor stunt cameos from a writers'-swap gag — no shared story — so it carries no flag. Character migrations between series (D.B. Russell joining *Cyber*, Catherine Willows joining *Vegas*) are not episode crossovers and are not flagged either.
-- **How the app uses it:** event groups drive the crossover banners, event strips, and badges in the tracker; the cameo entry is shown on the episode's page.
+- **Source:** the sheet in §1 has no notes, so event membership and story order come from the franchise record — principally the Paramount Wiki (Fandom) "CSI (franchise)" crossovers tables, which catalogue every inter-show connection by type, plus Wikipedia's event and episode articles ("CSI: Trilogy", "Kitty", "Two and a Half Deaths", the *CSI: Cyber* and *CSI: Vegas* season articles) and TVmaze guest-cast records, cross-checked against the sheet's own dates and positions. A full classification audit of every connection in the franchise was carried out on 2026-11-04; this section states its conclusions.
+- **The classification rule:** an **event** is one story told across **two or more episodes**. A single episode that features another show's characters is a **cameo annotation**, never a one-part event.
+- **The events — four, covering 9 episodes.** In every case the story order equals the broadcast order, and the sheet already sequences the parts consecutively:
+  1. **Felony Flight → Manhattan Manhunt** — *CSI: Miami* S4E7 → *CSI: NY* S2E7.
+  2. **Who & What → Where and Why** — *CSI* S8E6 → *Without a Trace* S6E6 (the event that brings the pack's one guest episode in).
+  3. **CSI: Trilogy** — *CSI: Miami* S8E7 "Bone Voyage" → *CSI: NY* S6E7 "Hammer Down" → *CSI* S10E7 "The Lost Girls".
+  4. **In Vino Veritas → Seth and Apep** — *CSI* S13E13 → *CSI: NY* S9E15.
+- **The cameo annotations — six episodes:**
+  - *CSI* S2E22 **"Cross Jurisdictions"** — Horatio Caine and the Miami team (the *CSI: Miami* backdoor pilot).
+  - *CSI: Miami* S2E23 **"MIA/NYC NonStop"** — Mac Taylor and the New York team (the *CSI: NY* backdoor pilot).
+  - *CSI* S14E21 **"Kitty"** — Avery Ryan (the *CSI: Cyber* backdoor pilot).
+  - *CSI* S15E6 **"The Twin Paradox"** — Avery Ryan consults again, profiling the Gig Harbor Killer.
+  - *CSI: NY* S1E4 **"Grand Master"** — Disco Placid, the Las Vegas audio consultant first seen in *CSI*'s "Anonymous".
+  - *CSI: NY* S3E22 **"Cold Reveal"** — **Scotty Valens (*Cold Case*)**: Danny Pino appears in character, inside a NY episode. That one-way appearance is *Cold Case*'s only on-screen connection to the family; no *Cold Case* episode is a crossover, which is why the series is excluded but the appearance is recorded — the same treatment the Chicago pack gives guest characters.
+- **The backdoor-pilot correction, owned plainly:** the first version of this pack flagged the three backdoor pilots above ("Cross Jurisdictions", "MIA/NYC NonStop", "Kitty") as one-episode "crossover" events, which rendered in the app as the nonsense label **"Part 1 of 1"**. That was this project's error. A backdoor pilot is a *launch*, not a crossover story: its case opens and closes inside its own episode, and the spun-off show's premiere opens an unrelated case — the story never leaves the host episode. The 2026-11-04 audit reclassified all three as the cameo annotations they are, and the pack's build pipeline and dataset validation now reject any event group of one episode, so the label cannot recur.
+- **Deliberately NOT flagged — not connections at all:**
+  - **"Two and a Half Deaths"** (*CSI* S8E16): a **writers' swap** with *Two and a Half Men* — their writers wrote this episode, CSI's wrote one of theirs, and the sitcom's stars appear for one uncredited shot **as themselves**. No fictional character crosses over.
+  - **"Theory of Everything"** (*CSI* S8E15): *MythBusters* hosts Jamie Hyneman and Adam Savage appear **as themselves** (background lab technicians) — a real-person cameo, not a series connection.
+  - **"Sqweegel"** (*CSI* S11E4): its killer comes from Anthony Zuiker's *Level 26* **novels** — a cross-media tie-in, not another TV series.
+  - **D.B. Russell joining *CSI: Cyber***: a **regular-cast migration** (Danson's character is a main cast member for Cyber's whole second season), not an episode appearance. His guest spot inside the "Seth and Apep" event above is flagged there, where it belongs.
+  - **Julie Finlay in *CSI: Cyber* S2E5 "Hack E.R."**: Elisabeth Shue appears in **archive footage only**, lifted from a *CSI* episode — no appearance was performed for *Cyber*, and this pack annotates performed appearances.
+  - **Original-series cast in *CSI: Vegas***: *Vegas* is a direct sequel set in the same lab, so returning originals are **sequel-cast continuity, not crossovers** — Grissom & Sara Sidle (season 1 main cast) and Catherine Willows (seasons 2–3 main cast) are regulars, and the guest-capacity returns (Jim Brass in *Vegas* S1E1–E2, David Hodges across four season-1 episodes, Greg Sanders in *Vegas* S2E17–E19) are enumerated here so the judgment is on the record. This is the exclusion nearest the line — the guests are one-off appearances in the same sense as the cameos above — and it is flagged as a judgment call that may be revisited. No character from *Miami*, *NY*, *Cyber* or *Without a Trace* ever appears in *CSI: Vegas*.
+  - **Same actor, different character** is not a connection (Carmine Giovinazzo played a one-scene suspect in *CSI* before starring in *NY*; Ricky Harris played a second, unrelated role in *Miami* after Disco Placid).
+- **How the app uses it:** event groups drive the crossover banners, event strips, and badges in the tracker; cameo annotations are shown on the episode's page.
 
 ## 5. What the app itself fetches after install
 
