@@ -8,14 +8,17 @@ namespace OneChicago.Pages;
 /// description (TVmaze, credited on the page), cameos, crossover
 /// context — and the actions: Play, Start from here, Mark watched.
 ///
-/// Prime Video links: the launch universe ships WITH its episode
-/// links (Decision 1 as amended 2026-11-03). This page carries the
-/// "Your Prime Video link" editor on top of them: the user pastes
-/// a link they copied from Prime Video themselves, the Store
-/// validates it strictly and keeps it as their override (the top
-/// precedence layer), and it can be removed again here. An episode
-/// with no link from any layer shows no Play button — it is
-/// tracker-only, exactly like an episode Prime doesn't carry.
+/// Streaming links (Decision 1G): the packs ship WITH their
+/// episode links. This page carries the "Your streaming links"
+/// editor on top of them — one section per platform: the user
+/// pastes a link they copied from that service themselves, the
+/// Store validates it against the platform's ID form and keeps
+/// it as their override (the top precedence layer), and it can
+/// be removed again here. The badges under the meta line list
+/// EVERY link the entry carries; the Play button appears only
+/// when a link sits on a service in My Services — an entry
+/// whose links are all elsewhere is tracker-only, exactly like
+/// an episode with no links at all.
 /// </summary>
 public partial class EpisodeDetailPage : ContentPage
 {
@@ -40,6 +43,7 @@ public partial class EpisodeDetailPage : ContentPage
 				}
 			}),
 		});
+		BuildLinkEditors();
 		Bind();
 	}
 
@@ -92,8 +96,21 @@ public partial class EpisodeDetailPage : ContentPage
 		// visible exactly when a real description is on screen.
 		DescCreditLabel.IsVisible = hasDesc && !descHidden;
 
-		BindPrimeLink();
-		PlayEpisodeButton.IsVisible = !string.IsNullOrWhiteSpace(AppHost.Store.PrimeIdFor(_ep));
+		// Badges: EVERY link the entry carries (dataset +
+		// overrides), whatever My Services says — the detail page
+		// shows what exists; playback rules live in Watch.
+		var allLinks = AppHost.Store.LinksFor(_ep);
+		LinksBadgeLabel.IsVisible = allLinks.Count > 0;
+		LinksBadgeLabel.Text = allLinks.Count == 0
+			? ""
+			: "Plays on: " + string.Join(" · ",
+				allLinks.Select(l => PlatformCatalog.Find(l.Platform)?.DisplayName ?? l.Platform));
+
+		BindLinkEditors();
+		// Play appears only when a link sits on a service the
+		// user has (My Services): anything else is a checklist
+		// entry and shows no Play button at all.
+		PlayEpisodeButton.IsVisible = AppHost.Store.WatchLinksFor(_ep).Count > 0;
 
 		if (_ep.Cameos.Count > 0)
 		{
@@ -120,54 +137,155 @@ public partial class EpisodeDetailPage : ContentPage
 		WatchedButton.Text = _ep.Watched ? "Mark unwatched" : "Mark watched";
 	}
 
-	// ---- Your Prime Video link --------------------------------------
+	// ---- Your streaming links -----------------------------------
+	// One editor section per platform in the catalogue, built
+	// ONCE in the constructor: a rebind (watched toggle, a save)
+	// must never rebuild the sections and wipe an entry the user
+	// is mid-paste in. Bind only refreshes each section's status
+	// line and its Remove button's visibility.
 
-	/// <summary>Reflect the saved-link state: whether this episode
-	/// has one of the user's own links, and whether it can be
-	/// removed. The entry itself is left alone (the user may be
-	/// mid-paste when a rebind lands).</summary>
-	private void BindPrimeLink()
+	private sealed class LinkEditorRow
 	{
-		var store = AppHost.Store;
-		bool hasOverride = store.GetPrimeOverride(_ep.Key) != null;
-		PrimeLinkStatusLabel.Text = hasOverride
-			? "Your link is saved for this episode — Play uses it."
-			: string.IsNullOrWhiteSpace(store.PrimeIdFor(_ep))
-				? "No link saved for this episode yet — it can be tracked, but not started from the app."
-				: "This episode's Prime Video link came with the app.";
-		RemovePrimeLinkButton.IsVisible = hasOverride;
+		public required StreamingPlatform Platform;
+		public required Label Status;
+		public required Entry Entry;
+		public required Button RemoveButton;
 	}
 
-	private void OnSavePrimeLink(object sender, EventArgs e)
+	private readonly List<LinkEditorRow> _linkEditors = new();
+
+	private void BuildLinkEditors()
 	{
-		var pasted = (PrimeLinkEntry.Text ?? "").Trim();
+		foreach (var platform in PlatformCatalog.All)
+		{
+			var section = new VerticalStackLayout { Spacing = 0, Margin = new Thickness(0, 12, 0, 0) };
+
+			var name = new Label
+			{
+				Text = platform.DisplayName.ToUpperInvariant(),
+				FontSize = 13,
+				FontAttributes = FontAttributes.Bold,
+			};
+			name.SetDynamicResource(Label.TextColorProperty, "ThText2");
+			section.Add(name);
+
+			var status = new Label { FontSize = 14, LineBreakMode = LineBreakMode.WordWrap, Margin = new Thickness(0, 2, 0, 0) };
+			status.SetDynamicResource(Label.TextColorProperty, "ThText2");
+			section.Add(status);
+
+			var entry = new Entry
+			{
+				Placeholder = $"Paste a {platform.DisplayName} link or ID",
+				FontSize = 15,
+				Keyboard = Keyboard.Url,
+				BackgroundColor = Colors.Transparent,
+			};
+			entry.SetDynamicResource(Entry.TextColorProperty, "ThText");
+			entry.SetDynamicResource(Entry.PlaceholderColorProperty, "ThText3");
+			var border = new Border
+			{
+				StrokeThickness = 0,
+				Padding = new Thickness(10, 0),
+				Margin = new Thickness(0, 6, 0, 0),
+				StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = 10 },
+				Content = entry,
+			};
+			border.SetDynamicResource(Border.BackgroundColorProperty, "ThFieldBg");
+			section.Add(border);
+
+			var save = new Button
+			{
+				Text = "Save link",
+				FontSize = 16,
+				CornerRadius = 12,
+				HeightRequest = 48,
+				Margin = new Thickness(0, 6, 0, 0),
+			};
+			save.SetDynamicResource(Button.BackgroundColorProperty, "ThBtn2Bg");
+			save.SetDynamicResource(Button.TextColorProperty, "ThAccent");
+			section.Add(save);
+
+			var remove = new Button
+			{
+				Text = "Remove link",
+				FontSize = 16,
+				CornerRadius = 12,
+				HeightRequest = 48,
+				IsVisible = false,
+			};
+			remove.SetDynamicResource(Button.BackgroundColorProperty, "ThBtn2Bg");
+			remove.SetDynamicResource(Button.TextColorProperty, "ThPillText");
+			section.Add(remove);
+
+			var hint = new Label
+			{
+				Text = platform.EditorHint,
+				FontSize = 13,
+				LineBreakMode = LineBreakMode.WordWrap,
+				Margin = new Thickness(0, 4, 0, 0),
+			};
+			hint.SetDynamicResource(Label.TextColorProperty, "ThText3");
+			section.Add(hint);
+
+			var row = new LinkEditorRow { Platform = platform, Status = status, Entry = entry, RemoveButton = remove };
+			save.Clicked += (s, e) => OnSaveLink(row);
+			remove.Clicked += async (s, e) => await OnRemoveLink(row);
+			_linkEditors.Add(row);
+			LinkEditorStack.Add(section);
+		}
+	}
+
+	/// <summary>Reflect each platform's saved-link state for this
+	/// episode: the user's own override, a link that came with
+	/// the app, or none. The entries themselves are left alone
+	/// (the user may be mid-paste when a rebind lands).</summary>
+	private void BindLinkEditors()
+	{
+		var store = AppHost.Store;
+		var effective = store.LinksFor(_ep);
+		foreach (var row in _linkEditors)
+		{
+			bool hasOverride = store.GetLinkOverride(_ep.Key, row.Platform.Signifier) != null;
+			bool hasLink = effective.Any(l => l.Platform == row.Platform.Signifier);
+			row.Status.Text = hasOverride
+				? "Your link is saved for this episode — Play uses it."
+				: hasLink
+					? $"This episode's {row.Platform.DisplayName} link came with the app."
+					: $"No {row.Platform.DisplayName} link for this episode yet — it can be tracked, but not started from the app on {row.Platform.DisplayName}.";
+			row.RemoveButton.IsVisible = hasOverride;
+		}
+	}
+
+	private void OnSaveLink(LinkEditorRow row)
+	{
+		var pasted = (row.Entry.Text ?? "").Trim();
 		if (pasted.Length == 0)
 		{
-			PlayResultLabel.Text = "Paste the episode's Prime Video link above first — in Prime Video, open the episode, tap Share, then Copy link.";
+			PlayResultLabel.Text = $"Paste the episode's {row.Platform.DisplayName} link in its section above first. {row.Platform.EditorHint}";
 			return;
 		}
-		// The Store enforces the strict ID format (audit 1.4): a
-		// real Prime link yields its episode ID; anything else is
-		// rejected and nothing is stored.
-		if (AppHost.Store.SetPrimeContentId(_ep, pasted))
+		// The Store enforces the platform's ID form strictly: a
+		// real link yields its ID; anything else is rejected and
+		// nothing is stored.
+		if (AppHost.Store.SetLinkOverride(_ep, row.Platform.Signifier, pasted))
 		{
-			PrimeLinkEntry.Text = "";
+			row.Entry.Text = "";
 			PlayResultLabel.Text = "Link saved ✓ — this episode can now be started from the app.";
 		}
 		else
 		{
-			PlayResultLabel.Text = "That doesn't look like a Prime Video episode link — nothing was saved. Copy the link from the episode's own page in Prime Video and try again.";
+			PlayResultLabel.Text = $"That doesn't look like a {row.Platform.DisplayName} link or ID — nothing was saved. {row.Platform.EditorHint}";
 		}
 		Bind();
 	}
 
-	private async void OnRemovePrimeLink(object sender, EventArgs e)
+	private async Task OnRemoveLink(LinkEditorRow row)
 	{
 		var yes = await DisplayAlert("Remove link?",
-			"Your saved Prime Video link for this episode will be removed. The episode stays in the watch order — it just can't be started from the app until you add a link again.",
+			$"Your saved {row.Platform.DisplayName} link for this episode will be removed. The episode stays in the watch order — it just can't be started from the app on {row.Platform.DisplayName} until you add a link again.",
 			"Remove", "Cancel");
 		if (!yes) return;
-		AppHost.Store.SetPrimeContentId(_ep, "");
+		AppHost.Store.SetLinkOverride(_ep, row.Platform.Signifier, "");
 		PlayResultLabel.Text = "Link removed.";
 		Bind();
 	}
@@ -192,11 +310,35 @@ public partial class EpisodeDetailPage : ContentPage
 
 	private async void OnPlayEpisode(object sender, EventArgs e)
 	{
-		if (string.IsNullOrWhiteSpace(AppHost.Store.PrimeIdFor(_ep)))
+		// Resolve first (Decision 1G): the first link on a service
+		// the user has whose channel is on the TV. Every failure
+		// is a stated reason, never a silent nothing.
+		PlayResolution resolution;
+		try
 		{
-			// Defensive: the Play button is hidden without a link,
-			// so this only fires if state changed under the page.
-			PlayResultLabel.Text = "No Prime Video link saved for this episode — add yours under “Your Prime Video link” below, or open the episode on the TV manually.";
+			PlayResultLabel.Text = "Finding this episode on your TV…";
+			resolution = await AppHost.Player.ResolveTargetAsync(_ep);
+		}
+		catch (Exception)
+		{
+			PlayResultLabel.Text = "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.";
+			return;
+		}
+		if (resolution.Target is not { } target)
+		{
+			PlayResultLabel.Text = resolution.Kind switch
+			{
+				// Defensive: the Play button is hidden in the
+				// NoLinks / NoSelectedService cases, so these fire
+				// only if state changed under the page.
+				PlayResolutionKind.NoLinks =>
+					"No streaming link for this episode — add yours under “Your streaming links” below, or open the episode on the TV manually.",
+				PlayResolutionKind.NoSelectedService =>
+					$"This episode is on {JoinNames(resolution.LinkPlatformNames)}, which isn't in My Services — add it in Settings → My Services, or open the episode on the TV manually.",
+				PlayResolutionKind.NotInstalled =>
+					$"Your TV doesn't have {JoinNames(resolution.LinkPlatformNames)} installed — install it there, or open the episode on the TV manually.",
+				_ => "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.",
+			};
 			return;
 		}
 
@@ -205,7 +347,7 @@ public partial class EpisodeDetailPage : ContentPage
 
 		try
 		{
-			var result = await AppHost.Player.PlayAsync(_ep, AppHost.Store.PrimeIdFor(_ep), _ep.Headline);
+			var result = await AppHost.Player.PlayAsync(_ep, target, _ep.Headline);
 			PlayResultLabel.Text = result.Busy
 				? "Already trying — that tap was ignored; nothing extra was sent to the TV."
 				: result.AlreadyPlaying
@@ -214,10 +356,20 @@ public partial class EpisodeDetailPage : ContentPage
 						? $"Playing ✅ — at {GuidedPlayer.FormatPosition(result.PositionMs ?? 0)} on the TV."
 						: "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.";
 		}
-		catch (Exception ex)
+		catch (Exception)
 		{
 			PlayResultLabel.Text = "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.";
 		}
 		RefreshPlayButton();
 	}
+
+	/// <summary>"Netflix", "Netflix or Disney+", "Prime Video,
+	/// Netflix or Disney+" — for the resolution messages.</summary>
+	private static string JoinNames(IReadOnlyList<string> names) => names.Count switch
+	{
+		0 => "a streaming service",
+		1 => names[0],
+		2 => $"{names[0]} or {names[1]}",
+		_ => string.Join(", ", names.Take(names.Count - 1)) + $" or {names[^1]}",
+	};
 }

@@ -174,9 +174,21 @@ public class Store
 	{
 		public List<Episode>? Episodes;
 		public readonly Dictionary<string, string> DatasetIds = new();
+		public readonly Dictionary<string, List<EpisodeLink>> DatasetLinks = new();
 		public readonly HashSet<string> Watched = new();
-		public readonly Dictionary<string, string> PrimeIds = new();
+		/// <summary>The user's hand-saved link overrides, per
+		/// episode and platform (Decision 1G generalizes the old
+		/// Prime-only overrides): episode key → platform signifier
+		/// → content ID. An override replaces the dataset's link
+		/// for the SAME platform; it is the top precedence layer.</summary>
+		public readonly Dictionary<string, Dictionary<string, string>> LinkOverrides = new();
+		/// <summary>The content categories the user has switched
+		/// OFF in this universe (2026-11-04): their entries leave
+		/// the tracker and Up Next, progress untouched — the same
+		/// non-destructive precedent as universe exclusion.</summary>
+		public readonly HashSet<string> HiddenCategories = new();
 		public string LastStartedEpisodeKey = "";
+		public string LastStartedPlatform = "";
 		public long LastStartedPositionMs;
 		public long LastPositionSavedAtMs = -1;
 		public DateTimeOffset? DataUpdatedAt;
@@ -207,6 +219,17 @@ public class Store
 	{
 		get => ActiveData.LastStartedEpisodeKey;
 		private set => ActiveData.LastStartedEpisodeKey = value;
+	}
+
+	/// <summary>Which platform the last-started episode was
+	/// started on (a PlatformCatalog signifier; "" when unknown —
+	/// everything recorded before Decision 1G). Playback is only
+	/// ever attributed to an episode on a platform that could be
+	/// playing it (see MatchedPlatform).</summary>
+	public string LastStartedPlatform
+	{
+		get => ActiveData.LastStartedPlatform;
+		private set => ActiveData.LastStartedPlatform = value;
 	}
 	public long LastStartedPositionMs
 	{
@@ -350,7 +373,7 @@ public class Store
 	// "the" watched set / overrides / shipped IDs — they are the
 	// ACTIVE universe's now (Decision 1C).
 	private HashSet<string> _watched => ActiveData.Watched;
-	private Dictionary<string, string> _primeIds => ActiveData.PrimeIds;
+	private Dictionary<string, Dictionary<string, string>> _linkOverrides => ActiveData.LinkOverrides;
 
 	/// <summary>Prime IDs exactly as shipped in the ACTIVE
 	/// universe's dataset, captured before any user layer is
@@ -360,6 +383,92 @@ public class Store
 	/// 2026-11-03); a universe whose dataset ships none simply
 	/// leaves these empty.</summary>
 	private Dictionary<string, string> _datasetIds => ActiveData.DatasetIds;
+
+	/// <summary>All shipped links exactly as in the ACTIVE
+	/// universe's dataset (Decision 1G's pristine layer, the
+	/// multi-platform sibling of _datasetIds): episode key →
+	/// the dataset's own links, in the author's priority order.</summary>
+	private Dictionary<string, List<EpisodeLink>> _datasetLinks => ActiveData.DatasetLinks;
+
+	// ---- TV channel knowledge (Decision 1G) --------------------
+	// Which ECP channel id each platform's channel has ON THIS
+	// TV, discovered from /query/apps and cached here (global
+	// state — channels are a fact about the TV, not a universe).
+	// Channel ids vary per TV and per install, so nothing may
+	// hardcode them except Prime's long-standing 13, which stays
+	// as the fallback when discovery hasn't run.
+
+	private readonly Dictionary<string, string> _platformChannels = new();
+
+	/// <summary>The cached ECP channel id for a platform on this
+	/// TV, or null when it isn't known (never discovered, or the
+	/// channel isn't installed). Prime falls back to its proven
+	/// channel 13 when unknown.</summary>
+	public string? ChannelIdForPlatform(string platformSignifier)
+	{
+		if (_platformChannels.TryGetValue(platformSignifier, out var id) && !string.IsNullOrWhiteSpace(id))
+			return id;
+		return platformSignifier == PlatformCatalog.PrimeSignifier ? PrimeChannelId.ToString() : null;
+	}
+
+	/// <summary>Whether a platform's channel is KNOWN to be
+	/// installed on this TV (its id is in the discovered cache).
+	/// Prime counts as known only when discovered like the
+	/// others — ChannelIdForPlatform's 13 is a play-time
+	/// fallback, not knowledge.</summary>
+	public bool PlatformChannelKnown(string platformSignifier) =>
+		_platformChannels.TryGetValue(platformSignifier, out var id) && !string.IsNullOrWhiteSpace(id);
+
+	/// <summary>The signifiers of every platform whose channel is
+	/// known installed on this TV.</summary>
+	public IReadOnlySet<string> KnownInstalledPlatforms =>
+		_platformChannels.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).Select(kv => kv.Key).ToHashSet();
+
+	/// <summary>Record (or forget, with an empty id) a platform's
+	/// channel id on this TV. Persists like any other setting
+	/// unless told not to (discovery batches its save).</summary>
+	public void SetPlatformChannel(string platformSignifier, string? channelId, bool save = true)
+	{
+		if (PlatformCatalog.Find(platformSignifier) == null) return;
+		if (string.IsNullOrWhiteSpace(channelId))
+			_platformChannels.Remove(platformSignifier);
+		else
+			_platformChannels[platformSignifier] = channelId.Trim();
+		if (save) SaveSettings();
+	}
+
+	// ---- My Services (Sam's ruling, 2026-11-04) ----------------
+	// Which of the three streaming services the user actually
+	// HAS, picked in setup and mirrored in Settings. Global state
+	// like the TV address — a fact about the household, not a
+	// universe. Link choice (GuidedPlayer.ResolveTargetAsync)
+	// only ever plays a link whose platform is selected here AND
+	// whose channel is on the TV; an entry whose links all sit on
+	// unselected services gets no Watch button at all and behaves
+	// as a pure checklist entry. The default is ALL THREE
+	// selected, so installs predating the setting behave exactly
+	// as before.
+
+	private readonly HashSet<string> _myServices =
+		PlatformCatalog.All.Select(p => p.Signifier).ToHashSet();
+
+	/// <summary>The services the user has, by signifier. Never
+	/// null; an empty set is a real choice (tracker-only use),
+	/// not a missing value.</summary>
+	public IReadOnlySet<string> MyServices => _myServices;
+
+	/// <summary>Whether the user has the given service.</summary>
+	public bool HasService(string platformSignifier) => _myServices.Contains(platformSignifier);
+
+	/// <summary>Select or deselect one of My Services. Persists
+	/// like any other setting. Unknown signifiers are ignored.</summary>
+	public void SetServiceSelected(string platformSignifier, bool selected)
+	{
+		if (PlatformCatalog.Find(platformSignifier) == null) return;
+		if (selected) _myServices.Add(platformSignifier);
+		else _myServices.Remove(platformSignifier);
+		SaveSettings();
+	}
 
 	public event Action? Changed;
 
@@ -432,6 +541,17 @@ public class Store
 		public string? DataRefreshAttemptedAt { get; set; }
 
 		// ---- Global settings (unchanged across the refactor) ----
+		/// <summary>Discovered ECP channel ids per platform
+		/// signifier (Decision 1G). Null in state files written
+		/// before the multi-platform build → nothing is known yet
+		/// and discovery fills it in on the first Play.</summary>
+		public Dictionary<string, string>? PlatformChannels { get; set; }
+		/// <summary>My Services (2026-11-04): the signifiers of
+		/// the streaming services the user has. Null in state
+		/// files written before the setting existed → all three
+		/// selected (the pre-setting behaviour). An explicitly
+		/// empty list is honoured: the user has none of them.</summary>
+		public List<string>? MyServices { get; set; }
 		public string TvIp { get; set; } = DefaultTvIp;
 		public int PollSeconds { get; set; } = DefaultPollSeconds;
 		public bool? AutoplayEnabled { get; set; }
@@ -448,15 +568,65 @@ public class Store
 	/// <summary>One universe's section of the state file: its
 	/// watched set, its hand-saved link overrides, its last-started
 	/// episode, and its refresh timestamps. Everything here belongs
-	/// to exactly one universe and is only ever applied to it.</summary>
+	/// to exactly one universe and is only ever applied to it.
+	///
+	/// Link overrides (Decision 1G): <see cref="LinkOverrides"/>
+	/// is the current shape (episode key → platform signifier →
+	/// ID). <see cref="PrimeIds"/> is the pre-1G shape, kept for
+	/// READING: a section with no LinkOverrides field adopts its
+	/// PrimeIds as prime-platform overrides, untouched. New saves
+	/// write LinkOverrides in full AND PrimeIds as its prime
+	/// subset, so a downgrade to the previous build keeps the
+	/// user's Prime overrides.</summary>
 	private class UniverseStateFile
 	{
 		public List<string> Watched { get; set; } = new();
-		public Dictionary<string, string> PrimeIds { get; set; } = new();
+		public Dictionary<string, string>? PrimeIds { get; set; } = new();
+		public Dictionary<string, Dictionary<string, string>>? LinkOverrides { get; set; }
+		/// <summary>The categories switched off in this universe
+		/// (2026-11-04). Null or absent in sections written before
+		/// the setting existed → nothing hidden.</summary>
+		public List<string>? HiddenCategories { get; set; }
 		public string LastStartedEpisodeKey { get; set; } = "";
+		public string? LastStartedPlatform { get; set; }
 		public long LastStartedPositionMs { get; set; }
 		public string? DataUpdatedAt { get; set; }
 		public string? DataRefreshAttemptedAt { get; set; }
+	}
+
+	/// <summary>Adopt one saved section's link overrides into a
+	/// universe's data (Decision 1G): the current LinkOverrides
+	/// shape when the section carries it; otherwise its legacy
+	/// PrimeIds, which ARE prime-platform overrides.</summary>
+	private static void AdoptLinkOverrides(UniverseData data, Dictionary<string, Dictionary<string, string>>? linkOverrides, Dictionary<string, string>? primeIds)
+	{
+		data.LinkOverrides.Clear();
+		if (linkOverrides != null)
+		{
+			foreach (var (key, perPlatform) in linkOverrides)
+			{
+				if (perPlatform == null) continue;
+				foreach (var (platform, id) in perPlatform)
+				{
+					if (PlatformCatalog.Find(platform) == null || string.IsNullOrWhiteSpace(id)) continue;
+					if (!data.LinkOverrides.TryGetValue(key, out var dict))
+						data.LinkOverrides[key] = dict = new Dictionary<string, string>();
+					dict[PlatformCatalog.Find(platform)!.Signifier] = id;
+				}
+			}
+			return;
+		}
+		if (primeIds != null)
+		{
+			foreach (var (key, id) in primeIds)
+			{
+				if (string.IsNullOrWhiteSpace(id)) continue;
+				data.LinkOverrides[key] = new Dictionary<string, string>
+				{
+					[PlatformCatalog.PrimeSignifier] = id,
+				};
+			}
+		}
 	}
 
 	/// <summary>Apply the nullable iteration-3 settings from a state
@@ -548,7 +718,16 @@ public class Store
 		}
 		data.Episodes = episodes;
 		data.DatasetIds.Clear();
-		foreach (var ep in episodes) data.DatasetIds[ep.Key] = ep.PrimeContentId;
+		data.DatasetLinks.Clear();
+		foreach (var ep in episodes)
+		{
+			// The rows arrive link-normalized (DatasetFile.Parse):
+			// capture the dataset's pristine layers — its prime ID
+			// and its full links — before the user layers apply.
+			data.DatasetIds[ep.Key] = ep.PrimeContentId;
+			data.DatasetLinks[ep.Key] = ep.Links
+				.Select(l => new EpisodeLink { Platform = l.Platform, Id = l.Id }).ToList();
+		}
 		foreach (var ep in episodes) ep.Watched = data.Watched.Contains(ep.Key);
 		foreach (var ep in episodes) ep.PrimeContentId = PrimeIdFor(data, ep);
 		return episodes;
@@ -584,8 +763,18 @@ public class Store
 				if (UniverseCatalogue.Find(id) == null || saved == null) continue;
 				var data = DataFor(id);
 				foreach (var k in saved.Watched) data.Watched.Add(k);
-				foreach (var kv in saved.PrimeIds) data.PrimeIds[kv.Key] = kv.Value;
+				// Link overrides: the current per-platform shape,
+				// or a pre-1G section's PrimeIds adopted as prime
+				// overrides — either way nothing is lost.
+				AdoptLinkOverrides(data, saved.LinkOverrides, saved.PrimeIds);
+				// Hidden categories (2026-11-04): known values
+				// only; a section predating the setting has none.
+				if (saved.HiddenCategories != null)
+					foreach (var c in saved.HiddenCategories)
+						if (EpisodeCategories.IsKnown(c))
+							data.HiddenCategories.Add(c.Trim().ToLowerInvariant());
 				data.LastStartedEpisodeKey = saved.LastStartedEpisodeKey ?? "";
+				data.LastStartedPlatform = PlatformCatalog.Find(saved.LastStartedPlatform)?.Signifier ?? "";
 				data.LastStartedPositionMs = saved.LastStartedPositionMs;
 				data.LastPositionSavedAtMs = saved.LastStartedPositionMs;
 				data.DataUpdatedAt = ParseTimestamp(saved.DataUpdatedAt);
@@ -598,7 +787,7 @@ public class Store
 			// the launch universe's data.
 			var data = DataFor(UniverseCatalogue.DefaultId);
 			foreach (var k in state.Watched ?? new List<string>()) data.Watched.Add(k);
-			foreach (var kv in state.PrimeIds ?? new Dictionary<string, string>()) data.PrimeIds[kv.Key] = kv.Value;
+			AdoptLinkOverrides(data, null, state.PrimeIds);
 			data.LastStartedEpisodeKey = state.LastStartedEpisodeKey ?? "";
 			data.LastStartedPositionMs = state.LastStartedPositionMs ?? 0;
 			data.LastPositionSavedAtMs = state.LastStartedPositionMs ?? 0;
@@ -671,6 +860,32 @@ public class Store
 			// (see ResolveUniverses). The active universe's dataset
 			// then materializes against that data below.
 			ResolveUniverses(state);
+			// Discovered channel ids (Decision 1G): adopted only
+			// for known platforms with plausible values; a file
+			// predating them simply starts with nothing known.
+			_platformChannels.Clear();
+			if (state.PlatformChannels != null)
+			{
+				foreach (var (platform, channelId) in state.PlatformChannels)
+				{
+					var known = PlatformCatalog.Find(platform);
+					if (known != null && !string.IsNullOrWhiteSpace(channelId) && channelId.Length <= 20)
+						_platformChannels[known.Signifier] = channelId.Trim();
+				}
+			}
+			// My Services (2026-11-04): adopted only for known
+			// signifiers; a file predating the setting leaves the
+			// all-three default standing, so nothing changes for
+			// existing installs until the user picks.
+			if (state.MyServices != null)
+			{
+				_myServices.Clear();
+				foreach (var signifier in state.MyServices)
+				{
+					var known = PlatformCatalog.Find(signifier);
+					if (known != null) _myServices.Add(known.Signifier);
+				}
+			}
 			// A stored address that fails the production rule (typed
 			// before validation existed, or carried in by an old
 			// backup) is dropped to the empty setup state — the app
@@ -712,11 +927,25 @@ public class Store
 		var universes = new Dictionary<string, UniverseStateFile>();
 		foreach (var (id, data) in _universes)
 		{
+			// Link overrides write in the current per-platform
+			// shape; PrimeIds rides along as its prime subset so
+			// the previous build, if ever reinstalled, still reads
+			// the user's Prime overrides (see UniverseStateFile).
+			var primeSubset = new Dictionary<string, string>();
+			foreach (var (key, perPlatform) in data.LinkOverrides)
+				if (perPlatform.TryGetValue(PlatformCatalog.PrimeSignifier, out var primeId))
+					primeSubset[key] = primeId;
 			universes[id] = new UniverseStateFile
 			{
 				Watched = data.Watched.ToList(),
-				PrimeIds = new Dictionary<string, string>(data.PrimeIds),
+				PrimeIds = primeSubset,
+				LinkOverrides = data.LinkOverrides.ToDictionary(
+					kv => kv.Key, kv => new Dictionary<string, string>(kv.Value)),
+				HiddenCategories = data.HiddenCategories.Count > 0
+					? data.HiddenCategories.OrderBy(c => c).ToList()
+					: null,
 				LastStartedEpisodeKey = data.LastStartedEpisodeKey,
+				LastStartedPlatform = data.LastStartedPlatform.Length > 0 ? data.LastStartedPlatform : null,
 				LastStartedPositionMs = data.LastStartedPositionMs,
 				DataUpdatedAt = FormatTimestamp(data.DataUpdatedAt),
 				DataRefreshAttemptedAt = FormatTimestamp(data.DataRefreshAttemptedAt),
@@ -728,6 +957,17 @@ public class Store
 			IncludedUniverses = IncludedUniverseIds.ToList(),
 			ActiveUniverseId = ActiveUniverseId,
 			Universes = universes,
+			PlatformChannels = _platformChannels.Count > 0
+				? new Dictionary<string, string>(_platformChannels)
+				: null,
+			// Always written, even when empty: null means
+			// "predates the setting" (all three), an empty list
+			// means the user has none of them — the two must
+			// never blur. Catalogue order keeps the file stable.
+			MyServices = PlatformCatalog.All
+				.Select(p => p.Signifier)
+				.Where(s => _myServices.Contains(s))
+				.ToList(),
 			TvIp = TvIp,
 			PollSeconds = PollSeconds,
 			AutoplayEnabled = AutoplayEnabled,
@@ -782,7 +1022,16 @@ public class Store
 		var pristineJson = DatasetFile.Serialize(fresh, ActiveUniverseId);
 		var data = ActiveData;
 		_datasetIds.Clear();
-		foreach (var ep in fresh) _datasetIds[ep.Key] = ep.PrimeContentId;
+		_datasetLinks.Clear();
+		foreach (var ep in fresh)
+		{
+			// Serialize has link-normalized the rows; capture the
+			// pristine layers exactly as LoadUniverseDatasetAsync
+			// does, so the two load paths can never disagree.
+			_datasetIds[ep.Key] = ep.PrimeContentId;
+			_datasetLinks[ep.Key] = ep.Links
+				.Select(l => new EpisodeLink { Platform = l.Platform, Id = l.Id }).ToList();
+		}
 		data.Episodes = fresh;
 		foreach (var ep in fresh) ep.Watched = _watched.Contains(ep.Key);
 		ApplyPrimeIds();
@@ -798,8 +1047,134 @@ public class Store
 	/// <summary>Sam's hand-saved Prime ID override for an episode
 	/// identity, if one exists (used by the data refresh to judge ID
 	/// coverage the way the app actually experiences it).</summary>
-	public string? GetPrimeOverride(string key) =>
-		_primeIds.TryGetValue(key, out var id) && !string.IsNullOrWhiteSpace(id) ? id : null;
+	public string? GetPrimeOverride(string key) => GetLinkOverride(key, PlatformCatalog.PrimeSignifier);
+
+	/// <summary>The user's hand-saved override for one episode on
+	/// one platform, if one exists (Decision 1G).</summary>
+	public string? GetLinkOverride(string key, string platformSignifier) =>
+		_linkOverrides.TryGetValue(key, out var perPlatform)
+		&& perPlatform.TryGetValue(platformSignifier, out var id)
+		&& !string.IsNullOrWhiteSpace(id)
+			? id
+			: null;
+
+	/// <summary>Every hand-saved override in the ACTIVE universe,
+	/// as (episode key, platform signifier, ID) — the diagnostics
+	/// snapshot's material (it masks the IDs before printing).</summary>
+	public IEnumerable<(string Key, string Platform, string Id)> AllLinkOverrides()
+	{
+		foreach (var (key, perPlatform) in _linkOverrides)
+			foreach (var (platform, id) in perPlatform)
+				if (!string.IsNullOrWhiteSpace(id))
+					yield return (key, platform, id);
+	}
+
+	/// <summary>THE resolution of an episode's playable links
+	/// (Decision 1G). Layers, in order: the dataset's shipped
+	/// links (the pack author's priority order), with the user's
+	/// hand-saved override replacing the dataset's link for the
+	/// SAME platform in its slot, and an override for a platform
+	/// the dataset doesn't carry appended at the end. Returns
+	/// fresh copies — callers may not mutate the layers.</summary>
+	public List<EpisodeLink> LinksFor(Episode ep) => LinksFor(ActiveData, ep);
+
+	/// <summary>The links Watch can actually use (My Services,
+	/// 2026-11-04): LinksFor filtered to the services the user
+	/// has, order preserved. Badges and the link editor always
+	/// show LinksFor in full; play paths, Watch-button visibility
+	/// and autoplay use this. An entry whose links all sit on
+	/// services the user doesn't have returns empty here and
+	/// behaves as a pure checklist entry.</summary>
+	public List<EpisodeLink> WatchLinksFor(Episode ep) =>
+		LinksFor(ep).Where(l => _myServices.Contains(l.Platform)).ToList();
+
+	private static List<EpisodeLink> LinksFor(UniverseData data, Episode ep)
+	{
+		var result = new List<EpisodeLink>();
+		IEnumerable<EpisodeLink> datasetLinks;
+		if (data.DatasetLinks.TryGetValue(ep.Key, out var shipped))
+			datasetLinks = shipped;
+		else
+			// An episode that never passed through dataset loading
+			// (a harness row): its own links, normalized on the fly.
+			datasetLinks = ep.Links ?? new List<EpisodeLink>();
+		foreach (var link in datasetLinks)
+		{
+			var platform = PlatformCatalog.Find(link.Platform);
+			if (platform == null || string.IsNullOrWhiteSpace(link.Id)) continue;
+			if (result.Any(l => l.Platform == platform.Signifier)) continue;
+			result.Add(new EpisodeLink { Platform = platform.Signifier, Id = link.Id });
+		}
+		if (data.LinkOverrides.TryGetValue(ep.Key, out var overrides))
+		{
+			foreach (var (platformSignifier, id) in overrides)
+			{
+				var platform = PlatformCatalog.Find(platformSignifier);
+				if (platform == null || string.IsNullOrWhiteSpace(id)) continue;
+				var existing = result.FirstOrDefault(l => l.Platform == platform.Signifier);
+				if (existing != null)
+					existing.Id = id;
+				else
+					result.Add(new EpisodeLink { Platform = platform.Signifier, Id = id });
+			}
+		}
+		return result;
+	}
+
+	/// <summary>The platforms an episode could be playing on, for
+	/// attributing TV playback to it: the platforms of its
+	/// effective links — or, for a tracker-only episode Sam may
+	/// still start by hand on the TV, Prime only (exactly the
+	/// pre-1G attribution). When the app itself last started THIS
+	/// episode, its recorded platform outranks the list.</summary>
+	public IReadOnlyList<StreamingPlatform> CandidatePlatformsFor(Episode ep)
+	{
+		if (LastStartedEpisodeKey == ep.Key
+			&& PlatformCatalog.Find(LastStartedPlatform) is { } session)
+			return new[] { session };
+		var platforms = LinksFor(ep)
+			.Select(l => PlatformCatalog.Find(l.Platform))
+			.Where(p => p != null)
+			.Select(p => p!)
+			.ToList();
+		return platforms.Count > 0 ? platforms : new[] { PlatformCatalog.Prime };
+	}
+
+	/// <summary>If the TV's player status belongs to one of the
+	/// platforms this episode could be playing on, that platform;
+	/// otherwise null. Matching is by plugin id against the
+	/// platform's cached channel id (Prime: channel 13), or by
+	/// plugin name against the platform's channel name — the
+	/// media-player is always the authority the monitor trusts.</summary>
+	public StreamingPlatform? MatchedPlatform(MediaPlayerStatus status, Episode ep)
+	{
+		foreach (var platform in CandidatePlatformsFor(ep))
+		{
+			var channelId = ChannelIdForPlatform(platform.Signifier);
+			if (channelId != null && status.PluginId == channelId) return platform;
+			if (status.PluginName != null
+				&& string.Equals(status.PluginName, platform.ChannelName, StringComparison.OrdinalIgnoreCase))
+				return platform;
+		}
+		return null;
+	}
+
+	/// <summary>Whether the TV's player status is ANY of the
+	/// three streaming platforms (by cached channel id or plugin
+	/// name) — the state-aware hero button's "the TV has a
+	/// streaming app up" test, platform-blind.</summary>
+	public bool IsStreamingPlatformStatus(MediaPlayerStatus status)
+	{
+		foreach (var platform in PlatformCatalog.All)
+		{
+			var channelId = ChannelIdForPlatform(platform.Signifier);
+			if (channelId != null && status.PluginId == channelId) return true;
+			if (status.PluginName != null
+				&& string.Equals(status.PluginName, platform.ChannelName, StringComparison.OrdinalIgnoreCase))
+				return true;
+		}
+		return false;
+	}
 
 	/// <summary>The dataset's own shipped ID for an episode identity
 	/// ("" when the dataset ships none for it) — the pristine layer,
@@ -823,7 +1198,9 @@ public class Store
 	/// not whichever universe happens to be active.</summary>
 	private static string PrimeIdFor(UniverseData data, Episode ep)
 	{
-		if (data.PrimeIds.TryGetValue(ep.Key, out var own) && !string.IsNullOrWhiteSpace(own)) return own;
+		if (data.LinkOverrides.TryGetValue(ep.Key, out var perPlatform)
+			&& perPlatform.TryGetValue(PlatformCatalog.PrimeSignifier, out var own)
+			&& !string.IsNullOrWhiteSpace(own)) return own;
 		return data.DatasetIds.TryGetValue(ep.Key, out var shipped) ? shipped : "";
 	}
 
@@ -854,7 +1231,22 @@ public class Store
 		SaveSettingsQuiet();
 	}
 
-	public Episode? UpNext => Episodes.FirstOrDefault(e => !e.Watched);
+	/// <summary>Whether an entry is visible under its universe's
+	/// category switches (2026-11-04): its effective category is
+	/// not switched off. Hidden entries keep their watched state
+	/// and every other fact — they simply don't surface.</summary>
+	private static bool CategoryVisible(UniverseData data, Episode ep) =>
+		!data.HiddenCategories.Contains(ep.EffectiveCategory);
+
+	/// <summary>The ACTIVE universe form of CategoryVisible —
+	/// the tracker rows' filter.</summary>
+	public bool CategoryVisibleFor(Episode ep) => CategoryVisible(ActiveData, ep);
+
+	/// <summary>The next unwatched VISIBLE entry. Hidden-category
+	/// entries are skipped exactly as watched ones are, so Up
+	/// Next, the monitor, autoplay and the notification all move
+	/// past them without ever touching their progress.</summary>
+	public Episode? UpNext => Episodes.FirstOrDefault(e => !e.Watched && CategoryVisible(ActiveData, e));
 
 	public int WatchedCount => Episodes.Count(e => e.Watched);
 
@@ -862,7 +1254,50 @@ public class Store
 	{
 		var next = UpNext;
 		if (next == null) return new();
-		return Episodes.Where(e => e.Order > next.Order && !e.Watched).Take(count).ToList();
+		return Episodes.Where(e => e.Order > next.Order && !e.Watched && CategoryVisible(ActiveData, e)).Take(count).ToList();
+	}
+
+	// ---- Content categories (2026-11-04) ------------------------
+	// Per-universe switches over the categories a pack mixes in
+	// (films beside episodes, one-shots, web extras…). Stored in
+	// the universe's own state section; hiding is
+	// non-destructive — the same precedent as universe
+	// exclusion — and a universe whose pack holds fewer than two
+	// categories shows no switches at all.
+
+	/// <summary>The categories present in a universe's dataset,
+	/// with their entry counts, in first-appearance (watch)
+	/// order. Loads the dataset on demand, like
+	/// UniverseEpisodeCountAsync.</summary>
+	public async Task<List<(string Category, int Count)>> UniverseCategoriesAsync(string universeId)
+	{
+		var episodes = await LoadUniverseDatasetAsync(universeId);
+		var counts = new Dictionary<string, int>();
+		var order = new List<string>();
+		foreach (var ep in episodes)
+		{
+			var category = ep.EffectiveCategory;
+			if (!counts.ContainsKey(category)) order.Add(category);
+			counts[category] = counts.GetValueOrDefault(category) + 1;
+		}
+		return order.Select(c => (c, counts[c])).ToList();
+	}
+
+	/// <summary>Whether a category is switched off in a
+	/// universe.</summary>
+	public bool CategoryHidden(string universeId, string category) =>
+		DataFor(universeId).HiddenCategories.Contains(category);
+
+	/// <summary>Switch a category off or on in a universe.
+	/// Persists like any other setting; nothing else about the
+	/// universe changes.</summary>
+	public void SetCategoryHidden(string universeId, string category, bool hidden)
+	{
+		if (!EpisodeCategories.IsKnown(category)) return;
+		var data = DataFor(universeId);
+		if (hidden) data.HiddenCategories.Add(category.Trim().ToLowerInvariant());
+		else data.HiddenCategories.Remove(category.Trim().ToLowerInvariant());
+		SaveSettings();
 	}
 
 	public List<Episode> EventGroupOf(Episode ep)
@@ -952,31 +1387,53 @@ public class Store
 	/// nothing is stored and the caller gets false so its UI surface
 	/// can tell the user plainly. An empty value clears the override
 	/// and returns true.</summary>
-	public bool SetPrimeContentId(Episode ep, string id)
+	public bool SetPrimeContentId(Episode ep, string id) =>
+		SetLinkOverride(ep, PlatformCatalog.PrimeSignifier, id);
+
+	/// <summary>Save a hand-entered link override for one
+	/// platform (Decision 1G — SetPrimeContentId generalized).
+	/// The platform's own ID rules extract the bare ID from a
+	/// pasted link (PlatformIdRules); a value carrying no valid
+	/// ID for that platform is REJECTED — nothing is stored and
+	/// the caller gets false. An empty value clears that
+	/// platform's override and returns true.</summary>
+	public bool SetLinkOverride(Episode ep, string platformSignifier, string raw)
 	{
-		if (string.IsNullOrWhiteSpace(id))
+		var platform = PlatformCatalog.Find(platformSignifier);
+		if (platform == null) return false;
+		if (string.IsNullOrWhiteSpace(raw))
 		{
 			// Clearing an override falls back to the dataset's
-			// shipped link, if it has one, else none.
-			_primeIds.Remove(ep.Key);
-			ep.PrimeContentId = PrimeIdFor(ep);
+			// shipped link for that platform, if it has one.
+			if (_linkOverrides.TryGetValue(ep.Key, out var existing))
+			{
+				existing.Remove(platform.Signifier);
+				if (existing.Count == 0) _linkOverrides.Remove(ep.Key);
+			}
+			if (platform.IsPrime) ep.PrimeContentId = PrimeIdFor(ep);
 			SaveSettings();
 			return true;
 		}
-		var normalized = NormalizeContentId(id);
-		if (!IsValidContentId(normalized)) return false;
-		_primeIds[ep.Key] = normalized;
-		ep.PrimeContentId = PrimeIdFor(ep);
+		var normalized = PlatformIdRules.Normalize(platform.Signifier, raw);
+		if (!PlatformIdRules.IsValid(platform.Signifier, normalized)) return false;
+		if (!_linkOverrides.TryGetValue(ep.Key, out var perPlatform))
+			_linkOverrides[ep.Key] = perPlatform = new Dictionary<string, string>();
+		perPlatform[platform.Signifier] = normalized;
+		if (platform.IsPrime) ep.PrimeContentId = PrimeIdFor(ep);
 		SaveSettings();
 		return true;
 	}
 
 	/// <summary>Record that the guided Play sequence got this episode
 	/// playing on the TV. Persisted, so the already-playing guard in
-	/// GuidedPlayer survives app restarts.</summary>
-	public void NoteEpisodeStarted(Episode ep, long positionMs)
+	/// GuidedPlayer survives app restarts. The platform it was
+	/// started on is recorded too (Decision 1G): playback is only
+	/// attributed to the episode on a platform that could be
+	/// playing it.</summary>
+	public void NoteEpisodeStarted(Episode ep, long positionMs, string platformSignifier = "")
 	{
 		LastStartedEpisodeKey = ep.Key;
+		LastStartedPlatform = PlatformCatalog.Find(platformSignifier)?.Signifier ?? "";
 		LastStartedPositionMs = positionMs;
 		LastPositionSavedAtMs = positionMs;
 		SaveSettings();
@@ -1251,11 +1708,16 @@ public class Store
 		_watched.Clear();
 		foreach (var k in state.Watched)
 			if (validKeys.Contains(k)) _watched.Add(k);
-		_primeIds.Clear();
+		// Legacy backups carry Prime-only overrides; they land in
+		// the per-platform store as prime overrides (Decision 1G).
+		_linkOverrides.Clear();
 		if (state.PrimeIds != null)
 			foreach (var kv in state.PrimeIds)
 				if (validKeys.Contains(kv.Key) && IsValidContentId(kv.Value))
-					_primeIds[kv.Key] = kv.Value;
+					_linkOverrides[kv.Key] = new Dictionary<string, string>
+					{
+						[PlatformCatalog.PrimeSignifier] = kv.Value,
+					};
 		TvIp = TryValidateTvAddress(state.TvIp, out var validIp) ? validIp : TvIp;
 		PollSeconds = IsValidPollSeconds(state.PollSeconds) ? state.PollSeconds : DefaultPollSeconds;
 		LastStartedEpisodeKey = state.LastStartedEpisodeKey != null && validKeys.Contains(state.LastStartedEpisodeKey)
@@ -1306,6 +1768,11 @@ public class Store
 		// the launch universe active — the fresh-install universe
 		// state (Decision 1C).
 		_universes.Clear();
+		_platformChannels.Clear();
+		// My Services returns to its fresh-install state too:
+		// all three selected.
+		_myServices.Clear();
+		foreach (var p in PlatformCatalog.All) _myServices.Add(p.Signifier);
 		_included.Clear();
 		foreach (var u in UniverseCatalogue.All) _included.Add(u.Id);
 		ActiveUniverseId = UniverseCatalogue.DefaultId;

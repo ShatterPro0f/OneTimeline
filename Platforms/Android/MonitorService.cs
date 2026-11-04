@@ -316,7 +316,7 @@ public class MonitorService : Service
 			RequestUpdate();
 			return;
 		}
-		if (string.IsNullOrWhiteSpace(store.PrimeIdFor(next)))
+		if (store.WatchLinksFor(next).Count == 0)
 		{
 			// Mirrors autoplay's no-link behaviour: checked off,
 			// advanced, nothing sent — the notification now shows the
@@ -326,7 +326,16 @@ public class MonitorService : Service
 			return;
 		}
 
-		await player.PlayAsync(next, store.PrimeIdFor(next), next.Headline);
+		// Resolve the target (Decision 1G): the next episode may
+		// live on a different platform than the one just finished.
+		var resolution = await player.ResolveTargetAsync(next);
+		if (resolution.Target is not { } target)
+		{
+			RequestUpdate();
+			return;
+		}
+
+		await player.PlayAsync(next, target, next.Headline);
 		RequestUpdate();
 	}
 
@@ -365,42 +374,53 @@ public class MonitorService : Service
 				"Play", Android.Resource.Drawable.IcMediaPlay, false, "alldone");
 		}
 
-		string total = ep.RuntimeMinutes is int r ? $"{r}:00" : "";
-		string OfTotal(long pos) => total.Length > 0 ? $"{Clock(pos)} of {total}" : Clock(pos);
+		// The platform this reading belongs to, if it's one the
+		// current episode could be playing on (Decision 1G — the
+		// multi-platform form of the old Prime-only branches).
+		var platform = status != null ? store.MatchedPlatform(status, ep) : null;
+
+		// The total the position is read against: the TV's own
+		// duration when the platform reports one (Disney+), else
+		// the dataset runtime.
+		long? totalMs = platform is { ReportsDuration: true } && status?.DurationMs is long dur && dur > 0
+			? dur
+			: ep.RuntimeMinutes is int r ? (long)r * 60_000 : null;
+		string OfTotal(long pos) => totalMs is long tm ? $"{Clock(pos)} of {Clock(tm)}" : Clock(pos);
 
 		string text, toggleLabel;
 		int toggleIcon;
 		string mode;
-		if (status is { IsPrime: true, State: "play", PositionMs: long pos })
+		if (platform != null && status!.State == "play" && status.PositionMs is long pos)
 		{
 			text = $"Playing · {OfTotal(pos)}";
 			toggleLabel = "Pause";
 			toggleIcon = Android.Resource.Drawable.IcMediaPause;
 			mode = "playing";
 		}
-		else if (status is { IsPrime: true, State: "pause", PositionMs: long ppos })
+		else if (platform != null && status!.State == "pause" && status.PositionMs is long ppos)
 		{
 			text = $"Paused · {OfTotal(ppos)}";
 			toggleLabel = "Resume";
 			toggleIcon = Android.Resource.Drawable.IcMediaPlay;
 			mode = "paused";
 		}
-		else if (status is { IsPrime: true })
+		else if (platform != null)
 		{
-			// Prime open in menus / on a page. If the app has a saved
-			// mid-episode position for this episode, say where it
-			// would continue — the same reading the hero uses.
+			// The episode's platform is open in menus / on a page.
+			// If the app has a saved mid-episode position for this
+			// episode, say where it would continue — the same
+			// reading the hero uses.
 			if (store.LastStartedEpisodeKey == ep.Key && store.LastStartedPositionMs > 30_000)
 				text = $"Continue at {OfTotal(store.LastStartedPositionMs)}";
 			else
-				text = "Prime is open — nothing playing";
+				text = $"{platform.DisplayName} is open — nothing playing";
 			toggleLabel = "Play";
 			toggleIcon = Android.Resource.Drawable.IcMediaPlay;
-			mode = "primeidle";
+			mode = $"idle:{platform.Signifier}";
 		}
 		else if (status is { Reachable: true })
 		{
-			text = "TV is on — Prime isn't open";
+			text = "TV is on — nothing playing";
 			toggleLabel = "Play";
 			toggleIcon = Android.Resource.Drawable.IcMediaPlay;
 			mode = "tvon";

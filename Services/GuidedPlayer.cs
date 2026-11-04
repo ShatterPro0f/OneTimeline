@@ -108,6 +108,31 @@ public class GuidedPlayResult
 ///    confirm, the sequence ends in an honest failure and records
 ///    NOTHING as started: a failed switch must look failed, never
 ///    "as though it had switched".
+///
+/// Iteration 9 — MULTI-PLATFORM (Decision 1G, on the platform
+/// evidence of 2026-11-04): the sequence now takes a PlayTarget —
+/// a platform, its content ID, its TV channel id and the entry's
+/// mediaType — resolved from the episode's links by
+/// ResolveTargetAsync. The PRIME sequence above is untouched in
+/// behaviour (it is the proven path; its plugin checks now read
+/// through the sequence's match channel, which for Prime is
+/// channel 13 — the same test). Netflix and Disney+ run a
+/// simpler sibling sequence built only from steps Sam's TV
+/// proved: cold = /launch/ form of the deep link; warm = /input/
+/// form (the route Sam's Netflix episode test used); a ignored
+/// warm link escalates to the /launch/ form, which displaces;
+/// a cold launch that never brings the channel forward triggers
+/// one channel re-discovery and retry, then the plain-launch +
+/// /input/ fallback. Strict confirmation (WaitAfterLinkAsync)
+/// is shared, with page Selects DISABLED for these platforms —
+/// neither has a proven detail-page state, and no keypress is
+/// sent blind. PROFILE SELECTS ARE PRIME-ONLY: whether Netflix
+/// or Disney+ present a profile gate on a cold launch is
+/// untested on Sam's TV, so the streaming sequence sends none;
+/// if a gate is up, the sequence fails honestly and a warm
+/// retry (after the user picks a profile with the remote)
+/// works. Disney+ needs no profile step in Sam's tests — its
+/// /launch/ proofs went straight to the content.
 /// </summary>
 public class GuidedPlayer
 {
@@ -122,6 +147,15 @@ public class GuidedPlayer
 	// the veto in PlayCoreAsync, and AutoplayCoordinator.
 	private string _lastSuccessKey = "";
 	private DateTimeOffset _lastSuccessAt = DateTimeOffset.MinValue;
+
+	// The channel the RUNNING sequence is addressing (iteration
+	// 9): WaitAfterLinkAsync judges the player against this
+	// channel's plugin id. For Prime it is channel 13 — exactly
+	// the old IsPrime test. Set at each sequence's start; the
+	// player is single-flight, so one field is safe.
+	private string _matchPluginId = Store.PrimeChannelId.ToString();
+
+	private bool Matches(MediaPlayerStatus s) => s.PluginId == _matchPluginId;
 
 	/// <summary>True while the 60-second post-success quiet period for
 	/// this episode key is still running.</summary>
@@ -142,7 +176,68 @@ public class GuidedPlayer
 	/// button in the app can show the shared "Working…" state.</summary>
 	public event Action? RunStateChanged;
 
-	public async Task<GuidedPlayResult> PlayAsync(Episode? episode, string contentId, string episodeLabel)
+	/// <summary>Resolve an episode's playable target (Decision
+	/// 1G + My Services, 2026-11-04): the first of its effective
+	/// links (dataset order = the pack author's priority) whose
+	/// platform the user HAS (My Services) and whose channel is
+	/// installed on the TV. The Store's cached channel knowledge
+	/// is tried first; if nothing matches, the TV is asked
+	/// (/query/apps discovery) and the choice retried. When the
+	/// TV can't be asked at all and the episode carries a Prime
+	/// link on a service the user has, Prime's proven channel 13
+	/// is aimed at exactly as the app always has. An episode
+	/// whose links all sit on services the user doesn't have
+	/// resolves to NoSelectedService — for this user it is a
+	/// pure checklist entry. Every outcome is a stated reason,
+	/// not a silent failure.</summary>
+	public async Task<PlayResolution> ResolveTargetAsync(Episode ep)
+	{
+		var allLinks = _store.LinksFor(ep);
+		if (allLinks.Count == 0) return PlayResolution.NoLinks();
+		var links = _store.WatchLinksFor(ep);
+		if (links.Count == 0)
+		{
+			var unselectedNames = allLinks
+				.Select(l => PlatformCatalog.Find(l.Platform)?.DisplayName ?? l.Platform)
+				.Distinct()
+				.ToList();
+			return PlayResolution.NoSelectedService(unselectedNames);
+		}
+		var names = links
+			.Select(l => PlatformCatalog.Find(l.Platform)?.DisplayName ?? l.Platform)
+			.Distinct()
+			.ToList();
+
+		var chosen = PlayLinkChoice.Choose(links, _store.KnownInstalledPlatforms);
+		if (chosen == null)
+		{
+			bool answered = await _roku.DiscoverChannelsAsync();
+			chosen = PlayLinkChoice.Choose(links, _store.KnownInstalledPlatforms);
+			if (chosen == null)
+			{
+				var primeLink = links.FirstOrDefault(l => l.Platform == PlatformCatalog.PrimeSignifier);
+				if (!answered && primeLink != null)
+					return PlayResolution.Ready(TargetFor(ep, primeLink));
+				return answered
+					? PlayResolution.NotInstalled(names)
+					: PlayResolution.Unreachable(names);
+			}
+		}
+		return PlayResolution.Ready(TargetFor(ep, chosen));
+	}
+
+	private PlayTarget TargetFor(Episode ep, EpisodeLink link)
+	{
+		var platform = PlatformCatalog.Find(link.Platform)!;
+		// Non-null for any chosen link: choice requires the
+		// platform to be known-installed (or Prime, whose
+		// fallback this is).
+		var channelId = _store.ChannelIdForPlatform(platform.Signifier)
+			?? Store.PrimeChannelId.ToString();
+		return new PlayTarget(platform, link.Id, channelId, ep.DeepLinkMediaType);
+	}
+
+	public async Task<GuidedPlayResult> PlayAsync(Episode? episode, PlayTarget target, string episodeLabel)
 	{
 		if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
 		{
@@ -154,7 +249,9 @@ public class GuidedPlayer
 		RunStateChanged?.Invoke();
 		try
 		{
-			return await PlayCoreAsync(episode, contentId, episodeLabel);
+			return target.Platform.IsPrime
+				? await PlayPrimeAsync(episode, target, episodeLabel)
+				: await PlayStreamingAsync(episode, target, episodeLabel);
 		}
 		finally
 		{
@@ -163,9 +260,14 @@ public class GuidedPlayer
 		}
 	}
 
-	private async Task<GuidedPlayResult> PlayCoreAsync(Episode? episode, string contentId, string episodeLabel)
+	/// <summary>The Prime sequence — iterations 1–8 above,
+	/// behaviour unchanged. The target's channel is Prime's 13
+	/// and its ID faces the same strict GTI normalization as
+	/// every Prime ID before it.</summary>
+	private async Task<GuidedPlayResult> PlayPrimeAsync(Episode? episode, PlayTarget target, string episodeLabel)
 	{
-		var id = Store.NormalizeContentId(contentId);
+		_matchPluginId = Store.PrimeChannelId.ToString();
+		var id = Store.NormalizeContentId(target.ContentId);
 
 		if (string.IsNullOrEmpty(id))
 		{
@@ -182,7 +284,7 @@ public class GuidedPlayer
 				_lastSuccessAt = DateTimeOffset.UtcNow;
 			}
 			if (episode != null && r.PositionMs is long hp)
-				_store.NoteEpisodeStarted(episode, hp);
+				_store.NoteEpisodeStarted(episode, hp, PlatformCatalog.PrimeSignifier);
 			return r;
 		}
 
@@ -362,6 +464,155 @@ public class GuidedPlayer
 		return new GuidedPlayResult { Playing = false };
 	}
 
+	/// <summary>
+	/// The Netflix / Disney+ sequence (iteration 9) — built only
+	/// from steps proven on Sam's TV (platform-test-findings):
+	///  - Step 0 is Prime's already-playing guard, read against
+	///    this platform's channel: same episode advancing → send
+	///    nothing; same episode paused → one Play keypress resumes.
+	///  - WARM (the platform is the foreground app, or its player
+	///    is playing): the /input/ form first — the route Sam's
+	///    Netflix episode test proved — judged by the same strict
+	///    confirmation as Prime. If it's ignored, the /launch/
+	///    form follows: launching displaces whatever the channel
+	///    is showing.
+	///  - COLD: the /launch/ form carries the episode straight in
+	///    (every Disney+ proof used it). If the channel never
+	///    comes to the foreground, the cached channel id may be
+	///    stale: re-discover once and retry at the fresh id. Last
+	///    resort: plain launch, wait for the foreground, /input/.
+	///  - NO profile Select and NO page Select anywhere: neither
+	///    platform has a proven gate/page state on Sam's TV, and
+	///    no keypress is sent blind (see the class doc).
+	/// </summary>
+	private async Task<GuidedPlayResult> PlayStreamingAsync(Episode? episode, PlayTarget target, string episodeLabel)
+	{
+		var platform = target.Platform;
+		var id = PlatformIdRules.Normalize(platform.Signifier, target.ContentId);
+		if (!PlatformIdRules.IsValid(platform.Signifier, id))
+		{
+			return new GuidedPlayResult { Playing = false };
+		}
+		string channelId = target.ChannelId;
+		_matchPluginId = channelId;
+
+		bool sameAsLastStarted = episode != null
+			&& _store.LastStartedEpisodeKey == episode.Key
+			&& _store.LastStartedPlatform == platform.Signifier;
+
+		GuidedPlayResult Hit(GuidedPlayResult r)
+		{
+			if (episode != null && r.Playing)
+			{
+				_lastSuccessKey = episode.Key;
+				_lastSuccessAt = DateTimeOffset.UtcNow;
+			}
+			if (episode != null && r.PositionMs is long hp)
+				_store.NoteEpisodeStarted(episode, hp, platform.Signifier);
+			return r;
+		}
+
+		// Step 0 — already-playing guard (Prime's shape, this
+		// platform's channel).
+		var g1 = await _roku.GetMediaPlayerAsync();
+		await Task.Delay(1000);
+		var g2 = await _roku.GetMediaPlayerAsync();
+
+		bool advancing = Matches(g1) && Matches(g2)
+			&& g1.State == "play" && g2.State == "play"
+			&& g1.PositionMs is long sp1 && g2.PositionMs is long sp2 && sp2 > sp1;
+
+		if (advancing && g2.PositionMs is long nowPos)
+		{
+			if (sameAsLastStarted)
+			{
+				_store.NoteLastStartedPosition(nowPos);
+				return new GuidedPlayResult { Playing = true, AlreadyPlaying = true, PositionMs = nowPos };
+			}
+			// Something else is playing on this platform; the
+			// warm path below displaces it with our link.
+		}
+		else if (sameAsLastStarted && Matches(g2) && g2.State == "pause" && g2.PositionMs is long pausedPos)
+		{
+			// Same episode, paused: resume with a Play keypress —
+			// re-sending the link could restart it and cost the
+			// resume point (Prime's rule, same reasoning).
+			await _roku.SendKeyAsync("Play");
+			if (await WaitAfterLinkAsync(g2, gatePageSelect: false, 6, 0, allowPageSelect: false) is { Hit: { } resumed })
+				return Hit(resumed);
+			return new GuidedPlayResult { Playing = false };
+		}
+		else if (episode != null && InQuietPeriod(episode.Key))
+		{
+			return new GuidedPlayResult { Playing = false, QuietPeriod = true };
+		}
+
+		// Warm or cold? Player trust, as with Prime: if this
+		// platform's player says it's playing, the channel is up
+		// whatever active-app claims.
+		var fresh = await _roku.GetMediaPlayerAsync();
+		bool playerSaysPlaying = Matches(fresh) && fresh.State == "play";
+		var activeId = playerSaysPlaying ? channelId : await _roku.GetActiveAppIdAsync();
+		bool warm = activeId == channelId;
+
+		if (warm)
+		{
+			var b = await _roku.GetMediaPlayerAsync();
+			await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: true, target.MediaType);
+			var w = await WaitAfterLinkAsync(b, gatePageSelect: true, 8, 0, allowPageSelect: false);
+			if (w.Hit is { } hitW) return Hit(hitW);
+
+			// The launch form: displaces whatever the channel is
+			// showing when a warm link is ignored.
+			var b2 = await _roku.GetMediaPlayerAsync();
+			await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+			var w2 = await WaitAfterLinkAsync(b2, gatePageSelect: false, 8, 0, allowPageSelect: false);
+			if (w2.Hit is { } hitW2) return Hit(hitW2);
+			return new GuidedPlayResult { Playing = false };
+		}
+
+		// Cold: the launch form.
+		var bc = await _roku.GetMediaPlayerAsync();
+		await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+		var wc = await WaitAfterLinkAsync(bc, gatePageSelect: false, 10, 0, allowPageSelect: false);
+		if (wc.Hit is { } hitC) return Hit(hitC);
+
+		// The channel never came forward — the cached id may be
+		// stale (channels move when apps are reinstalled). One
+		// re-discovery and one retry at the fresh id.
+		if (await _roku.GetActiveAppIdAsync() != channelId && await _roku.DiscoverChannelsAsync())
+		{
+			var freshId = _store.ChannelIdForPlatform(platform.Signifier);
+			if (!string.IsNullOrEmpty(freshId) && freshId != channelId)
+			{
+				channelId = freshId;
+				_matchPluginId = channelId;
+				var br = await _roku.GetMediaPlayerAsync();
+				await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+				var wr = await WaitAfterLinkAsync(br, gatePageSelect: false, 10, 0, allowPageSelect: false);
+				if (wr.Hit is { } hitR) return Hit(hitR);
+			}
+		}
+
+		// Final fallback: open the channel plainly, wait for the
+		// foreground, then the /input/ form.
+		if (!await _roku.LaunchChannelAsync(channelId))
+		{
+			return new GuidedPlayResult { Playing = false };
+		}
+		for (int i = 0; i < 6; i++)
+		{
+			if (await _roku.GetActiveAppIdAsync() == channelId) break;
+			await Task.Delay(1000);
+		}
+		await Task.Delay(1000);
+		var bf = await _roku.GetMediaPlayerAsync();
+		await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: true, target.MediaType);
+		var wf = await WaitAfterLinkAsync(bf, gatePageSelect: false, 8, 0, allowPageSelect: false);
+		if (wf.Hit is { } hitF) return Hit(hitF);
+		return new GuidedPlayResult { Playing = false };
+	}
+
 	/// <summary>The outcome of one post-link wait (iteration 8).</summary>
 	private enum LinkOutcome
 	{
@@ -421,7 +672,7 @@ public class GuidedPlayer
 		// High-water position for reset (drop) detection — seeded with
 		// the baseline's position, so a drop relative to what was playing
 		// BEFORE the link counts even on the first post-link poll.
-		long? maxPos = baseline.IsPrime ? baseline.PositionMs : null;
+		long? maxPos = Matches(baseline) ? baseline.PositionMs : null;
 		bool novel = false;
 		bool sawReset = false;
 		bool advancingWithoutNovelty = false;
@@ -429,13 +680,13 @@ public class GuidedPlayer
 		int closeStuckSeconds = 0;
 		bool pageSelectSent = false;
 		bool pageIsOurs = !gatePageSelect;
-		string? prevState = baseline.IsPrime ? baseline.State : null;
+		string? prevState = Matches(baseline) ? baseline.State : null;
 
 		while (DateTimeOffset.UtcNow < deadline)
 		{
 			var s = await _roku.GetMediaPlayerAsync();
 
-			if (s.IsPrime && s.State == "play" && s.PositionMs is long p)
+			if (Matches(s) && s.State == "play" && s.PositionMs is long p)
 			{
 				// Reset evidence: a DROP to near the start from a much
 				// higher reading. A foreign stream that merely started
@@ -460,7 +711,7 @@ public class GuidedPlayer
 				prevPos = p;
 				closeStuckSeconds = 0;
 			}
-			else if (s.IsPrime && s.State == "close")
+			else if (Matches(s) && s.State == "close")
 			{
 				novel = true; // (a): a non-play Prime state seen after the link
 				closeObserved = true;
@@ -491,25 +742,25 @@ public class GuidedPlayer
 				// Pause/stop/other-plugin/no-answer polls. A non-play
 				// Prime state observed after the link is novelty
 				// evidence (a); play-without-a-position is not.
-				if (s.IsPrime && s.State != null && s.State != "play")
+				if (Matches(s) && s.State != null && s.State != "play")
 					novel = true;
 				closeStuckSeconds = 0;
 				if (s.State != "play") prevPos = null;
 			}
 
-			prevState = s.IsPrime ? s.State : null;
+			prevState = Matches(s) ? s.State : null;
 
 			if (DateTimeOffset.UtcNow >= deadline) break;
 			await Task.Delay(1000);
 		}
 
 		if (advancingWithoutNovelty && !novel && !sawReset
-			&& baseline.IsPrime && baseline.State == "play")
+			&& Matches(baseline) && baseline.State == "play")
 		{
 
 			return new LinkWaitResult(null, LinkOutcome.ForeignPlaying);
 		}
-		if (gatePageSelect && baseline.IsPrime && baseline.State == "close"
+		if (gatePageSelect && Matches(baseline) && baseline.State == "close"
 			&& closeObserved && !pageSelectSent)
 		{
 

@@ -9,12 +9,27 @@ public class MediaPlayerStatus
 	public string? PluginId { get; set; }
 	public string? PluginName { get; set; }
 	public long? PositionMs { get; set; }
+
+	/// <summary>The playing content's total length, when the
+	/// platform reports one. Disney+ does; Prime and Netflix
+	/// don't (null there) — the monitor judges their endings
+	/// against dataset runtimes (Decision 1G).</summary>
+	public long? DurationMs { get; set; }
 	public string? Error { get; set; }
 
 	public bool IsPrime => PluginId == Store.PrimeChannelId.ToString();
+
+	/// <summary>Whether the player belongs to the given ECP
+	/// channel id — the per-platform form of IsPrime.</summary>
+	public bool IsPlugin(string? channelId) => channelId != null && PluginId == channelId;
 	public bool IsPlaying => State == "play";
 	public bool IsPaused => State == "pause";
 }
+
+/// <summary>One channel installed on the TV, from /query/apps:
+/// its ECP id and its display name (the name is how the app
+/// recognizes the streaming platforms — see PlatformCatalog).</summary>
+public sealed record RokuAppInfo(string Id, string Name);
 
 /// <summary>
 /// Talks to the user's Roku TV over the home LAN via ECP (port 8060,
@@ -61,12 +76,11 @@ public class RokuClient
 			var player = doc.Root;
 			if (player == null) return new MediaPlayerStatus { Reachable = true };
 			var plugin = player.Element("plugin");
-			var posRaw = player.Element("position")?.Value?.Trim();
-			long? pos = null;
-			if (!string.IsNullOrEmpty(posRaw))
+			long? ParseMs(string? raw)
 			{
-				var digits = new string(posRaw.Where(char.IsDigit).ToArray());
-				if (long.TryParse(digits, out var p)) pos = p;
+				if (string.IsNullOrEmpty(raw)) return null;
+				var digits = new string(raw.Where(char.IsDigit).ToArray());
+				return long.TryParse(digits, out var v) ? v : null;
 			}
 			return new MediaPlayerStatus
 			{
@@ -74,7 +88,8 @@ public class RokuClient
 				State = (string?)player.Attribute("state"),
 				PluginId = (string?)plugin?.Attribute("id"),
 				PluginName = (string?)plugin?.Attribute("name"),
-				PositionMs = pos,
+				PositionMs = ParseMs(player.Element("position")?.Value?.Trim()),
+				DurationMs = ParseMs(player.Element("duration")?.Value?.Trim()),
 			};
 		}
 		catch (Exception ex)
@@ -138,6 +153,11 @@ public class RokuClient
 
 	public Task<bool> LaunchPrimeAsync() => PostAsync($"/launch/{Store.PrimeChannelId}");
 
+	/// <summary>Bring a channel to the foreground with no content
+	/// parameters (the streaming platforms' fallback step: open
+	/// the channel first, then address the episode via /input/).</summary>
+	public Task<bool> LaunchChannelAsync(string channelId) => PostAsync($"/launch/{channelId}");
+
 	public Task<bool> SendKeyAsync(string key) => PostAsync($"/keypress/{key}");
 
 	/// <summary>
@@ -149,10 +169,73 @@ public class RokuClient
 	public Task<bool> PlayEpisodeAsync(string contentId, bool primeAlreadyActive)
 		=> PlayEpisodeAsync(contentId, primeAlreadyActive, "episode");
 
-	public async Task<bool> PlayEpisodeAsync(string contentId, bool primeAlreadyActive, string mediaType)
+	public Task<bool> PlayEpisodeAsync(string contentId, bool primeAlreadyActive, string mediaType)
+		=> PlayOnChannelAsync(contentId, Store.PrimeChannelId.ToString(), primeAlreadyActive, mediaType);
+
+	/// <summary>The per-platform form of PlayEpisodeAsync
+	/// (Decision 1G): address a content ID to any channel, via
+	/// /input/ when the channel is already the active app, or
+	/// /launch/ when it isn't.</summary>
+	public async Task<bool> PlayOnChannelAsync(string contentId, string channelId, bool channelAlreadyActive, string mediaType)
 	{
 		var q = $"?contentId={Uri.EscapeDataString(contentId)}&mediaType={mediaType}";
-		var verb = primeAlreadyActive ? "input" : "launch";
-		return await PostAsync($"/{verb}/{Store.PrimeChannelId}{q}");
+		var verb = channelAlreadyActive ? "input" : "launch";
+		return await PostAsync($"/{verb}/{channelId}{q}");
+	}
+
+	/// <summary>The channels installed on the TV (/query/apps),
+	/// or null when the TV can't be asked (no address, off,
+	/// unreachable, unparseable answer).</summary>
+	public async Task<List<RokuAppInfo>?> GetInstalledAppsAsync()
+	{
+		try
+		{
+			var xml = await GetBoundedAsync("/query/apps");
+			if (xml == null) return null;
+			var doc = XDocument.Parse(xml);
+			var apps = new List<RokuAppInfo>();
+			foreach (var app in doc.Root?.Elements("app") ?? Enumerable.Empty<XElement>())
+			{
+				var id = (string?)app.Attribute("id");
+				var name = app.Value?.Trim();
+				if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(name))
+					apps.Add(new RokuAppInfo(id, name));
+			}
+			return apps;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	/// <summary>Discover the streaming platforms' channel ids on
+	/// this TV and cache them in the Store (Decision 1G): query
+	/// /query/apps, match each platform by its channel name, and
+	/// record what changed (a platform whose channel is gone is
+	/// forgotten, so link choice stops offering it). Returns true
+	/// when the TV answered — the cache then reflects reality —
+	/// and false when it couldn't be asked, in which case the
+	/// cache is left exactly as it was.</summary>
+	public async Task<bool> DiscoverChannelsAsync()
+	{
+		var apps = await GetInstalledAppsAsync();
+		if (apps == null) return false;
+		bool changed = false;
+		foreach (var platform in PlatformCatalog.All)
+		{
+			var found = apps.FirstOrDefault(a =>
+				string.Equals(a.Name, platform.ChannelName, StringComparison.OrdinalIgnoreCase));
+			var known = _store.PlatformChannelKnown(platform.Signifier)
+				? _store.ChannelIdForPlatform(platform.Signifier)
+				: null;
+			if (found?.Id != known)
+			{
+				_store.SetPlatformChannel(platform.Signifier, found?.Id, save: false);
+				changed = true;
+			}
+		}
+		if (changed) _store.SaveSettings();
+		return true;
 	}
 }

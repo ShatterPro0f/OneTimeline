@@ -87,7 +87,18 @@ public partial class SettingsPage : ContentPage
 		// Fire-and-forget: the rows build asynchronously (episode
 		// counts load datasets), and a toggle refreshes the
 		// data-dependent label through the callback.
-		_ = UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, RefreshDataLabel);
+		_ = UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, () =>
+		{
+			RefreshDataLabel();
+			// A universe toggled in or out can gain or lose a
+			// Content types block (CategorySection hides itself
+			// when nothing qualifies).
+			_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		});
+		_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		// The My Services rows (shared with setup —
+		// MyServicesSection), bound to the same Store state.
+		MyServicesSection.Build(ServicesList);
 		// Data refresh (iteration 7) is automatic on every app open
 		// and silent when it fails — this line is its only surface:
 		// the last successful update, or until then the last attempt.
@@ -277,8 +288,8 @@ public partial class SettingsPage : ContentPage
 	{
 		var store = AppHost.Store;
 		AutoplayNoteLabel.Text = store.AutoplayCountdownSeconds == 0
-			? "When an episode finishes on the TV, the app plays the next one in the watch order straight away — no countdown. Autoplay runs while the app is open — and in the background too, when Background mode (below) is on. Turn OFF Prime Video's own Auto Play (in Prime's settings on the TV) so this app is the one driving episode changes."
-			: $"When an episode finishes on the TV, the app counts down {store.AutoplayCountdownSeconds} seconds and plays the next one in the watch order. Autoplay runs while the app is open — and in the background too, when Background mode (below) is on. Turn OFF Prime Video's own Auto Play (in Prime's settings on the TV) so this app is the one driving episode changes.";
+			? "When an episode finishes on the TV, the app plays the next one in the watch order straight away — no countdown. Autoplay runs while the app is open — and in the background too, when Background mode (below) is on. Turn OFF each streaming app's own Auto Play (in that app's settings on the TV) so this app is the one driving episode changes."
+			: $"When an episode finishes on the TV, the app counts down {store.AutoplayCountdownSeconds} seconds and plays the next one in the watch order. Autoplay runs while the app is open — and in the background too, when Background mode (below) is on. Turn OFF each streaming app's own Auto Play (in that app's settings on the TV) so this app is the one driving episode changes.";
 	}
 
 	// Autoplay countdown (iteration 9): a free-form seconds field —

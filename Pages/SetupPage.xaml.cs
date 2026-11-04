@@ -5,7 +5,7 @@ namespace OneChicago.Pages;
 
 /// <summary>
 /// First-run setup (production Decision 7) — also re-runnable from
-/// Settings via "Run setup again". Four optional steps on one clean
+/// Settings via "Run setup again". Five optional steps on one clean
 /// page:
 ///
 ///  1. Universes (Decision 1C). Which packs to include — the rows
@@ -20,10 +20,14 @@ namespace OneChicago.Pages;
 ///  3. TV connection. Find My TV / manual entry + Check connection,
 ///     the same pieces Settings uses (RokuFinder, the Store's
 ///     address validation, RokuClient's device summary).
-///  4. Prime Video links. The launch universe ships with its
-///     links (Decision 1 as amended); this step explains how a
-///     user can replace a single episode's link with their own
-///     on that episode's page.
+///  4. My Services (2026-11-04). Which of Prime Video, Netflix
+///     and Disney+ the user actually has — the rows are
+///     MyServicesSection's, shared with Settings. Play only ever
+///     uses a picked service.
+///  5. Streaming links. The packs ship with their links
+///     (Decision 1 as amended); this step explains how a user
+///     can replace a single episode's link with their own on
+///     that episode's page.
 ///
 /// Done and Skip both mark setup completed (Store.SetupCompleted),
 /// so it is never auto-offered again; backing out without either
@@ -54,7 +58,14 @@ public partial class SetupPage : ContentPage
 			StartingSearchEntry.Text = "";
 			BuildStartingResults();
 			RefreshStartingStatus();
+			// A universe toggled in or out can gain or lose a
+			// Content types block.
+			_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
 		});
+		_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		// The My Services rows (shared with Settings —
+		// MyServicesSection), bound to the same Store state.
+		MyServicesSection.Build(ServicesList);
 	}
 
 	// ---- Starting point ----------------------------------------------
@@ -144,7 +155,7 @@ public partial class SetupPage : ContentPage
 		if (store.WatchedCount > 0)
 		{
 			var yes = await DisplayAlert("Start from the beginning?",
-				$"This un-marks all {store.WatchedCount} watched episodes. Your settings and any saved Prime Video links are kept.",
+				$"This un-marks all {store.WatchedCount} watched episodes. Your settings and any saved links are kept.",
 				"Start from the beginning", "Cancel");
 			if (!yes) return;
 		}

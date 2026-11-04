@@ -42,6 +42,14 @@ namespace OneChicago.Services;
 ///    polling session can never run away checking off episode after
 ///    episode Sam didn't watch.
 ///
+/// Multi-platform (Decision 1G): "Prime" above is now "a platform
+/// the current episode could be playing on" — the platforms of
+/// its links, or the platform the app last started it on
+/// (Store.MatchedPlatform). The rules are otherwise identical,
+/// with one addition: on a platform that reports a duration
+/// (Disney+), the TV's own duration replaces the dataset runtime
+/// as the length endings are judged against — the same
+/// fractions, a better ruler.
 /// </summary>
 public class RokuMonitor
 {
@@ -102,19 +110,23 @@ public class RokuMonitor
 			catch { /* a failed poll just waits for the next one */ }
 
 			// Adaptive cadence (iteration 5) — how OFTEN we look, nothing
-			// else: while Prime is playing, poll every second so the
-			// hero's position/progress/button move in near real time and
-			// completion is caught promptly for autoplay; paused gets
-			// 2 s; Prime open but idle (menus / page / stopped) 5 s;
-			// anything else keeps the slower configured rate. The
-			// completion-detection thresholds above are unchanged.
-			var delay = Last switch
-			{
-				{ IsPrime: true, State: "play" } => 1,
-				{ IsPrime: true, State: "pause" } => 2,
-				{ IsPrime: true } => 5,
-				_ => Math.Max(5, _store.PollSeconds),
-			};
+			// else: while the current episode's platform is playing,
+			// poll every second so the hero's position/progress/button
+			// move in near real time and completion is caught promptly
+			// for autoplay; paused gets 2 s; the platform open but
+			// idle (menus / page / stopped) 5 s; anything else keeps
+			// the slower configured rate. The completion-detection
+			// thresholds above are unchanged. (Pre-1G this keyed on
+			// Prime alone; the match is now against whichever
+			// platform the Up Next episode could be playing on.)
+			bool onPlatform = Last is { } lastStatus
+				&& _store.UpNext is { } upNext
+				&& _store.MatchedPlatform(lastStatus, upNext) != null;
+			var delay =
+				onPlatform && Last!.State == "play" ? 1 :
+				onPlatform && Last!.State == "pause" ? 2 :
+				onPlatform ? 5 :
+				Math.Max(5, _store.PollSeconds);
 			try { await Task.Delay(TimeSpan.FromSeconds(delay), ct); }
 			catch (TaskCanceledException) { break; }
 		}
@@ -139,13 +151,26 @@ public class RokuMonitor
 			// re-arming requires an observed position reset (below).
 		}
 
+		// The platform this reading belongs to, if it's one the
+		// current episode could be playing on (Decision 1G).
+		// Playback on any other plugin is not this episode, full
+		// stop — the multi-platform form of the old IsPrime gate.
+		var platform = _store.MatchedPlatform(s, next);
+		bool onPlatform = platform != null;
+
 		// While the episode the app last started is the one being tracked,
 		// keep its last-seen position fresh for GuidedPlayer's
 		// already-playing guard.
-		if (_store.LastStartedEpisodeKey == next.Key && s.IsPrime && s.PositionMs is long livePos)
+		if (_store.LastStartedEpisodeKey == next.Key && onPlatform && s.PositionMs is long livePos)
 			_store.NoteLastStartedPosition(livePos);
 
-		long runtimeMs = (long)(next.RuntimeMinutes ?? 0) * 60_000;
+		// The length endings are judged against: the TV's own
+		// duration when the platform reports one (Disney+), else
+		// the dataset's runtime — the pre-1G ruler for Prime and
+		// Netflix, which report no duration.
+		long runtimeMs = platform is { ReportsDuration: true } && s.DurationMs is long tvDuration && tvDuration > 0
+			? tvDuration
+			: (long)(next.RuntimeMinutes ?? 0) * 60_000;
 		long pos = s.PositionMs ?? 0;
 
 		// Credits-threshold setting, read as a parameter (see class
@@ -171,7 +196,7 @@ public class RokuMonitor
 		// "got well into it" evidence. A genuine resume reads within
 		// a second or two of the paused position, nowhere near half
 		// below it, so it never re-baselines.
-		bool justResumed = _prevState == "pause" && s.IsPrime && s.IsPlaying;
+		bool justResumed = _prevState == "pause" && onPlatform && s.IsPlaying;
 		if (justResumed)
 		{
 			_resumeGraceUntil = DateTimeOffset.Now + TimeSpan.FromSeconds(4);
@@ -186,19 +211,19 @@ public class RokuMonitor
 		bool inResumeGrace = DateTimeOffset.Now < _resumeGraceUntil;
 
 		// A position back near the start re-arms auto check-off.
-		if (s.IsPrime && s.PositionMs != null && pos < 120_000)
+		if (onPlatform && s.PositionMs != null && pos < 120_000)
 			_disarmed = false;
 
 		if (_disarmed) return;
 		if (runtimeMs <= 0) return;
 
 		bool endedSignal =
-			(s.IsPrime && (s.State == "stop" || s.State == "close")) ||
+			(onPlatform && (s.State == "stop" || s.State == "close")) ||
 			// Prime stopped being the active app (and the TV is answering).
-			(!s.IsPrime && s.Reachable && _maxPosition > 0) ||
+			(!onPlatform && s.Reachable && _maxPosition > 0) ||
 			// Position dropped back under a minute (e.g. Prime auto-played
 			// the next episode) after having been well into this one.
-			(s.IsPrime && s.PositionMs != null && pos < 60_000 && _maxPosition > 0);
+			(onPlatform && s.PositionMs != null && pos < 60_000 && _maxPosition > 0);
 
 		// Iteration 7.1 — sustained acceptance (see class doc). The
 		// three clauses above remain the DEFINITION of an end signal;
@@ -209,14 +234,14 @@ public class RokuMonitor
 		// grows the streak, except inside the resume grace window,
 		// where end signals neither fire nor accumulate. Any other
 		// non-end-signal poll also breaks the run.
-		if (s.IsPrime && s.IsPlaying && s.PositionMs != null && pos >= 60_000)
+		if (onPlatform && s.IsPlaying && s.PositionMs != null && pos >= 60_000)
 			_endSignalStreak = 0;
 		else if (endedSignal && !inResumeGrace)
 			_endSignalStreak++;
 		else if (!endedSignal)
 			_endSignalStreak = 0;
 
-		if (s.IsPrime && s.PositionMs != null)
+		if (onPlatform && s.PositionMs != null)
 		{
 			if (s.IsPlaying && pos > _lastPosition) _sawAdvancing = true;
 			if (pos > _maxPosition) _maxPosition = pos;

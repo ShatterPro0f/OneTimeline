@@ -11,6 +11,7 @@
             <Label x:Name="ShowLabel" FontSize="13" FontAttributes="Bold" TextColor="{DynamicResource ThAccent}" CharacterSpacing="1" />
             <Label x:Name="HeadlineLabel" FontSize="28" FontAttributes="Bold" TextColor="{DynamicResource ThText}" LineBreakMode="WordWrap" />
             <Label x:Name="MetaLabel" FontSize="14" TextColor="{DynamicResource ThText2}" />
+            <Label x:Name="LinksBadgeLabel" FontSize="13" FontAttributes="Bold" TextColor="{DynamicResource ThAccent}" Margin="0,2,0,0" IsVisible="False" />
 
             <HorizontalStackLayout Margin="0,4,0,0">
                 <Border x:Name="EventPill" BackgroundColor="{DynamicResource ThPillBg}" StrokeThickness="0" Padding="8,3" IsVisible="False">
@@ -38,28 +39,19 @@
                     BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThBtn2Text}" FontSize="16"
                     CornerRadius="12" HeightRequest="48" />
 
-            <!-- Your Prime Video link (production Decision 1): the app
-                 ships no episode links. The user pastes a link they
-                 copied from Prime Video themselves; the app stores
-                 only the episode ID from it, on this phone. Without
-                 one, the episode is tracker-only (no Play button). -->
-            <Label Text="YOUR PRIME VIDEO LINK" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,0" />
-            <Label x:Name="PrimeLinkStatusLabel" FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap" Margin="0,2,0,0" />
-            <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0" Margin="0,6,0,0">
-                <Border.StrokeShape>
-                    <RoundRectangle CornerRadius="10" />
-                </Border.StrokeShape>
-                <Entry x:Name="PrimeLinkEntry" Placeholder="Paste a Prime Video link" PlaceholderColor="{DynamicResource ThText3}"
-                       TextColor="{DynamicResource ThText}" BackgroundColor="Transparent" FontSize="15" Keyboard="Url" />
-            </Border>
-            <Button x:Name="SavePrimeLinkButton" Text="Save link" Clicked="OnSavePrimeLink"
-                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16"
-                    CornerRadius="12" HeightRequest="48" Margin="0,6,0,0" />
-            <Button x:Name="RemovePrimeLinkButton" Text="Remove link" Clicked="OnRemovePrimeLink" IsVisible="False"
-                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThPillText}" FontSize="16"
-                    CornerRadius="12" HeightRequest="48" />
-            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
-                   Text="To find the link: open this episode in the Prime Video app (or primevideo.com), tap Share, then Copy link — and paste it here. Only the episode ID from your link is kept, stored on this phone. Episodes without a link can still be tracked and checked off — they just can't be started from the app." />
+            <!-- Your streaming links (Decision 1G): one section per
+                 platform, built in code from the platform catalogue
+                 (EpisodeDetailPage.BuildLinkEditors). The packs ship
+                 their links; the user can replace any platform's
+                 link for this episode with their own, or add one the
+                 pack lacks. Only the ID from a pasted link is kept,
+                 stored on this phone. Entries with no usable link —
+                 none shipped, or all on services outside My
+                 Services — are tracker-only (no Play button). -->
+            <Label Text="YOUR STREAMING LINKS" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,0" />
+            <VerticalStackLayout x:Name="LinkEditorStack" Spacing="0" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,8,0,0"
+                   Text="Only the episode ID from your link is kept, stored on this phone. Episodes without a link can still be tracked and checked off — they just can't be started from the app. Play only uses the services picked in My Services (Settings)." />
 
             <Label x:Name="PlayResultLabel" FontSize="14" TextColor="{DynamicResource ThText2}" Margin="0,10,0,0" LineBreakMode="WordWrap" />
 

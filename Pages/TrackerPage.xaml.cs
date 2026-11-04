@@ -41,6 +41,13 @@ public class EpisodeRow
 
 	public bool HasEvent => Ep.IsEvent;
 	public string EventPill => Ep.EventPill;
+
+	/// <summary>The row's streaming badge (Decision 1G): EVERY
+	/// link the entry carries, short names in the author's
+	/// order — "Prime · Disney+". My Services filters playback,
+	/// never what's shown. Empty for link-less entries.</summary>
+	public string LinksBadge => TrackerPage.LinksBadgeText(Ep);
+	public bool HasLinks => LinksBadge.Length > 0;
 	public Color TitleColor => Ep.Watched ? ThemeService.ColorOf("WatchedText") : ThemeService.ColorOf("Text");
 	public FontAttributes TitleAttributes => IsCurrent ? FontAttributes.Bold : FontAttributes.None;
 	public Color RowBackground => IsCurrent ? ThemeService.ColorOf("CurrentBg") : ThemeService.ColorOf("PageBg");
@@ -332,13 +339,19 @@ public partial class TrackerPage : ContentPage
 		var s = AppHost.Monitor.Last;
 		var next = AppHost.Store.UpNext;
 
+		// The platform this reading belongs to, if it's one the
+		// current episode could be playing on (Decision 1G — the
+		// multi-platform form of the old Prime-only checks).
+		var platform = s != null && next != null ? AppHost.Store.MatchedPlatform(s, next) : null;
+		bool onPlatform = platform != null;
+
 		// The status line agrees with the hero button (v1.4): Playing /
 		// Paused at the TV's live position, or "Continue at …" when
-		// Prime is open with nothing loaded but the app holds a saved
-		// mid-episode position for the current episode.
+		// the platform is open with nothing loaded but the app holds
+		// a saved mid-episode position for the current episode.
 		string? label = null;
 		long? barPos = null;
-		if (s is { IsPrime: true } && s.PositionMs is long pos)
+		if (onPlatform && s!.PositionMs is long pos)
 		{
 			if (s.State == "play")
 			{
@@ -351,8 +364,8 @@ public partial class TrackerPage : ContentPage
 				barPos = pos;
 			}
 		}
-		if (label == null && next != null && s is { IsPrime: true }
-			&& s.State != "play" && s.State != "pause"
+		if (label == null && next != null && onPlatform
+			&& s!.State != "play" && s.State != "pause"
 			&& AppHost.Store.LastStartedEpisodeKey == next.Key
 			&& AppHost.Store.LastStartedPositionMs > 30_000)
 		{
@@ -364,10 +377,16 @@ public partial class TrackerPage : ContentPage
 		{
 			HeroLiveLabel.IsVisible = true;
 			HeroLiveLabel.Text = label;
-			if (barPos is long bp && next?.RuntimeMinutes is int rt && rt > 0)
+			// The bar's ruler: the TV's own duration when the
+			// platform reports one (Disney+), else the dataset
+			// runtime — the monitor's rule, mirrored.
+			long totalMs = platform is { ReportsDuration: true } && s!.DurationMs is long dur && dur > 0
+				? dur
+				: (long)(next?.RuntimeMinutes ?? 0) * 60_000;
+			if (barPos is long bp && totalMs > 0)
 			{
 				HeroProgress.IsVisible = true;
-				HeroProgress.Progress = Math.Min(1.0, (double)bp / ((long)rt * 60_000));
+				HeroProgress.Progress = Math.Min(1.0, (double)bp / totalMs);
 			}
 			else
 			{
@@ -407,6 +426,13 @@ public partial class TrackerPage : ContentPage
 
 	// ---- Up Next ---------------------------------------------------------
 
+	/// <summary>An episode's streaming badge text (Decision 1G):
+	/// every link it carries, short platform names in the
+	/// author's order. Shared by the watch-order rows and the
+	/// Up Next list.</summary>
+	internal static string LinksBadgeText(Episode ep) => string.Join(" · ",
+		AppHost.Store.LinksFor(ep).Select(l => PlatformCatalog.Find(l.Platform)?.ShortName ?? l.Platform));
+
 	private void BuildUpNext()
 	{
 		UpNextList.Clear();
@@ -442,6 +468,18 @@ public partial class TrackerPage : ContentPage
 				FontSize = 13,
 				TextColor = C("Text3"),
 			});
+			var badge = LinksBadgeText(ep);
+			if (badge.Length > 0)
+			{
+				stack.Add(new Label
+				{
+					Text = badge,
+					FontSize = 12,
+					FontAttributes = FontAttributes.Bold,
+					TextColor = C("Accent"),
+					Margin = new Thickness(0, 2, 0, 0),
+				});
+			}
 			if (ep.IsEvent)
 			{
 				stack.Add(new Border
@@ -484,6 +522,9 @@ public partial class TrackerPage : ContentPage
 		var q = (SearchEntry.Text ?? "").Trim().ToLowerInvariant();
 		var next = store.UpNext;
 		EpisodeList.ItemsSource = store.Episodes
+			// Category switches (2026-11-04): a hidden category's
+			// entries leave the tracker entirely — search included.
+			.Where(e => store.CategoryVisibleFor(e))
 			.Where(e => q.Length == 0
 				|| $"{e.Title} {e.Code} {e.Show} {e.DisplayShow} {e.Order}".ToLowerInvariant().Contains(q))
 			.Select(e => new EpisodeRow(e, next != null && e.Key == next.Key))
@@ -517,7 +558,7 @@ public partial class TrackerPage : ContentPage
 	///    "▶ Continue Watching", tap = one Play keypress to resume.
 	///  - Prime open with nothing loaded, and a saved mid-episode
 	///    position for the current episode → "▶ Continue Watching",
-	///    tap = the normal guided sequence (Prime resumes from its own
+	///    tap = the normal guided sequence (the platform resumes from its own
 	///    saved progress via the episode page's Resume default).
 	///  - Anything else → "▶ Play Now", the guided sequence, as shipped.
 	/// Recomputed on every poll (via UpdateHeroLive), every store
@@ -546,7 +587,11 @@ public partial class TrackerPage : ContentPage
 
 		var s = AppHost.Monitor.Last;
 		var next = AppHost.Store.UpNext;
-		if (s is { IsPrime: true } && s.PositionMs is long pos)
+		// Episode-scoped platform match (Decision 1G): the toggle
+		// faces below only ever appear for playback of THIS
+		// episode on one of its own platforms.
+		bool onPlatform = s != null && next != null && AppHost.Store.MatchedPlatform(s, next) != null;
+		if (onPlatform && s!.PositionMs is long pos)
 		{
 			if (s.State == "play")
 			{
@@ -561,8 +606,8 @@ public partial class TrackerPage : ContentPage
 				return;
 			}
 		}
-		if (next != null && s is { IsPrime: true }
-			&& s.State != "play" && s.State != "pause"
+		if (next != null && onPlatform
+			&& s!.State != "play" && s.State != "pause"
 			&& AppHost.Store.LastStartedEpisodeKey == next.Key
 			&& AppHost.Store.LastStartedPositionMs > 30_000)
 		{
@@ -573,15 +618,24 @@ public partial class TrackerPage : ContentPage
 
 		_heroMode = HeroButtonMode.Sequence;
 		PlayNowButton.Text = "▶ Play Now";
+		// My Services (2026-11-04): an episode with no link on a
+		// service the user has gets NO Watch button — it is a
+		// checklist entry, ticked off by hand (or skipped). The
+		// toggle faces above are untouched: they return before
+		// this point, so whatever is already playing on the TV
+		// can always be paused from here.
+		if (next != null)
+			PlayNowButton.IsVisible = AppHost.Store.WatchLinksFor(next).Count > 0;
 	}
 
 	/// <summary>The skip button's two faces (iteration 7): while the
-	/// TV has Prime up playing or paused, it's "Next episode ⏭";
-	/// when the current episode has no Prime link — a Play button
-	/// could only fail — it becomes the escape hatch, "Skip this
-	/// episode". Otherwise it isn't shown at all. Never while a
-	/// guided sequence is running (a skip mid-sequence could only be
-	/// dropped as Busy anyway).</summary>
+	/// TV has a streaming platform up playing or paused, it's
+	/// "Next episode ⏭"; when the current episode has no playable
+	/// link (none at all, or all on services outside My Services)
+	/// — a Play button could only fail — it becomes the escape
+	/// hatch, "Skip this episode". Otherwise it isn't shown at
+	/// all. Never while a guided sequence is running (a skip
+	/// mid-sequence could only be dropped as Busy anyway).</summary>
 	private void UpdateSkipButton()
 	{
 		var next = AppHost.Store.UpNext;
@@ -590,9 +644,10 @@ public partial class TrackerPage : ContentPage
 			SkipButton.IsVisible = false;
 			return;
 		}
-		bool noLink = string.IsNullOrWhiteSpace(AppHost.Store.PrimeIdFor(next));
+		bool noLink = AppHost.Store.WatchLinksFor(next).Count == 0;
 		var s = AppHost.Monitor.Last;
-		bool tvActive = s is { IsPrime: true } && (s.State == "play" || s.State == "pause");
+		bool tvActive = s != null && AppHost.Store.IsStreamingPlatformStatus(s)
+			&& (s.State == "play" || s.State == "pause");
 		SkipButton.IsVisible = noLink || tvActive;
 		SkipButton.Text = noLink ? "Skip this episode" : "Next episode ⏭";
 	}
@@ -629,9 +684,44 @@ public partial class TrackerPage : ContentPage
 
 		HeroVerdict.IsVisible = false;
 
+		// Resolve the target first (Decision 1G): the first link
+		// on a service the user has whose channel is on the TV.
+		// A failed resolution is a stated reason, never a silent
+		// nothing.
+		PlayResolution resolution;
 		try
 		{
-			var result = await AppHost.Player.PlayAsync(next, AppHost.Store.PrimeIdFor(next), next.Headline);
+			resolution = await AppHost.Player.ResolveTargetAsync(next);
+		}
+		catch (Exception)
+		{
+			HeroVerdict.IsVisible = true;
+			HeroVerdict.Text = "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.";
+			HeroVerdict.TextColor = C("VerdictWarn");
+			RefreshAll();
+			return;
+		}
+		if (resolution.Target is not { } target)
+		{
+			HeroVerdict.IsVisible = true;
+			HeroVerdict.Text = resolution.Kind switch
+			{
+				PlayResolutionKind.NoLinks =>
+					"No streaming link for this one — open it on the TV manually, or skip it.",
+				PlayResolutionKind.NoSelectedService =>
+					$"This one is on {string.Join(", ", resolution.LinkPlatformNames)} — not in My Services. Open it on the TV manually, or skip it.",
+				PlayResolutionKind.NotInstalled =>
+					$"{string.Join(", ", resolution.LinkPlatformNames)} isn't installed on your TV — open it on the TV manually, or skip it.",
+				_ => "Didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.",
+			};
+			HeroVerdict.TextColor = C("VerdictWarn");
+			RefreshAll();
+			return;
+		}
+
+		try
+		{
+			var result = await AppHost.Player.PlayAsync(next, target, next.Headline);
 			HeroVerdict.IsVisible = true;
 			if (result.Busy)
 			{
@@ -675,7 +765,7 @@ public partial class TrackerPage : ContentPage
 	/// targets, which by definition hasn't been started. No
 	/// confirmation: Start from here (rewind) undoes a skip in two
 	/// taps. When nothing is playing and the current episode simply
-	/// has no Prime link, the skip is the escape hatch — it only
+	/// has no playable link, the skip is the escape hatch — it only
 	/// advances, and sends nothing.</summary>
 	private async void OnSkipNext(object sender, EventArgs e)
 	{
@@ -687,9 +777,10 @@ public partial class TrackerPage : ContentPage
 			AppHost.Autoplay.Cancel();
 		AppHost.Autoplay.NoteManualPlay();
 
-		bool currentHasLink = !string.IsNullOrWhiteSpace(AppHost.Store.PrimeIdFor(current));
+		bool currentHasLink = AppHost.Store.WatchLinksFor(current).Count > 0;
 		var s = AppHost.Monitor.Last;
-		bool tvActive = s is { IsPrime: true } && (s.State == "play" || s.State == "pause");
+		bool tvActive = s != null && AppHost.Store.IsStreamingPlatformStatus(s)
+			&& (s.State == "play" || s.State == "pause");
 
 		store.SetWatched(current, true);
 		HeroVerdict.IsVisible = false;
@@ -711,17 +802,37 @@ public partial class TrackerPage : ContentPage
 			HeroVerdict.TextColor = C("VerdictOk");
 			return;
 		}
-		if (string.IsNullOrWhiteSpace(AppHost.Store.PrimeIdFor(next)))
+		if (AppHost.Store.WatchLinksFor(next).Count == 0)
 		{
 			HeroVerdict.IsVisible = true;
-			HeroVerdict.Text = $"Skipped ✓. “{next.Title}” has no Prime link — open it on the TV manually, or skip it too.";
+			HeroVerdict.Text = $"Skipped ✓. “{next.Title}” has no playable link — open it on the TV manually, or skip it too.";
 			HeroVerdict.TextColor = C("VerdictOk");
+			return;
+		}
+
+		// Resolve the next episode's target (Decision 1G) — it
+		// may live on a different platform than the one skipped.
+		PlayResolution? resolution = null;
+		try
+		{
+			resolution = await AppHost.Player.ResolveTargetAsync(next);
+		}
+		catch (Exception)
+		{
+			resolution = null;
+		}
+		if (resolution?.Target is not { } skipTarget)
+		{
+			HeroVerdict.IsVisible = true;
+			HeroVerdict.Text = $"Skipped ✓ — “{next.Title}” didn't start. Check the TV is on and the phone is on the same Wi-Fi, then try again.";
+			HeroVerdict.TextColor = C("VerdictWarn");
+			RefreshAll();
 			return;
 		}
 
 		try
 		{
-			var result = await AppHost.Player.PlayAsync(next, AppHost.Store.PrimeIdFor(next), next.Headline);
+			var result = await AppHost.Player.PlayAsync(next, skipTarget, next.Headline);
 			HeroVerdict.IsVisible = true;
 			if (result.Busy)
 			{
@@ -762,9 +873,9 @@ public partial class TrackerPage : ContentPage
 				CancelAutoplayButton.Text = "Cancel";
 				CancelAutoplayButton.IsVisible = true;
 				break;
-			case AutoplayPhase.NoPrimeLink:
+			case AutoplayPhase.NoPlayableLink:
 				HeroAutoplayLabel.IsVisible = true;
-				HeroAutoplayLabel.Text = "No Prime link for this one — open it manually";
+				HeroAutoplayLabel.Text = "No playable link for this one — open it manually";
 				CancelAutoplayButton.Text = "Dismiss";
 				CancelAutoplayButton.IsVisible = true;
 				break;

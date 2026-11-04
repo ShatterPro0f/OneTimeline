@@ -58,7 +58,7 @@
             <Button x:Name="RunSetupButton" Text="Run setup again" Clicked="OnRunSetup"
                     BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
-                   Text="Revisit the first-run setup: your starting point in the watch order, the TV connection, and how Prime Video links work. (Short version: open an episode in Prime Video, tap Share → Copy link, then paste it on that episode's page here — under “Your Prime Video link”.)" />
+                   Text="Revisit the first-run setup: your starting point in the watch order, your services, the TV connection, and how streaming links work. (Short version: paste a link or ID on an episode's page, under “Your streaming links”, and Play can start that episode.)" />
 
             <!-- UNIVERSES -->
             <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
@@ -66,6 +66,18 @@
                    Text="The universes included in your app — the same choice setup offered. Each universe keeps its own watch order and progress. Turning one off never deletes its progress: turn it back on and everything is where you left it." />
             <VerticalStackLayout x:Name="UniverseList" Spacing="0" />
             <Label x:Name="UniverseNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
+
+            <!-- CONTENT TYPES (hidden unless a universe mixes categories) -->
+            <Label x:Name="CategoryHeaderLabel" Text="CONTENT TYPES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" IsVisible="False" />
+            <Label x:Name="CategoryExplainerLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" IsVisible="False"
+                   Text="Some universes mix other kinds of content in with the episodes — films, specials, one-shots, web extras. Turn a kind off to leave it out of your tracker and Up Next; your progress on it is kept and comes back when you turn it on again. Universes with only episodes don't appear here." />
+            <VerticalStackLayout x:Name="CategoryList" Spacing="0" IsVisible="False" />
+
+            <!-- MY SERVICES -->
+            <Label Text="MY SERVICES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="The streaming services you have — the same choice setup offered. Play only ever uses a service picked here: an episode that only lives on a service you don't have has no Play button and is ticked off by hand, like any checklist entry." />
+            <VerticalStackLayout x:Name="ServicesList" Spacing="0" />
 
             <!-- AUTOPLAY -->
             <Label Text="AUTOPLAY" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />

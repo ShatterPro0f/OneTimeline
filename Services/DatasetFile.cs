@@ -42,16 +42,27 @@ public class DatasetFile
 		if (string.IsNullOrWhiteSpace(json)) return null;
 		try
 		{
+			List<Episode>? episodes;
 			var trimmed = json.TrimStart();
 			if (trimmed.StartsWith("["))
 			{
 				// Legacy bare array (pre-envelope device copy).
-				return JsonSerializer.Deserialize<List<Episode>>(json);
+				episodes = JsonSerializer.Deserialize<List<Episode>>(json);
 			}
-			var file = JsonSerializer.Deserialize<DatasetFile>(json);
-			if (file == null) return null;
-			if (!string.Equals(file.Universe, expectedUniverse, StringComparison.Ordinal)) return null;
-			return file.Episodes;
+			else
+			{
+				var file = JsonSerializer.Deserialize<DatasetFile>(json);
+				if (file == null) return null;
+				if (!string.Equals(file.Universe, expectedUniverse, StringComparison.Ordinal)) return null;
+				episodes = file.Episodes;
+			}
+			// Multi-platform normalization (Decision 1G): a legacy
+			// primeContentId becomes a prime link here, at the
+			// boundary, so every consumer downstream sees one
+			// uniform links shape whatever form the file used.
+			if (episodes != null)
+				foreach (var ep in episodes) LinkNormalization.Apply(ep);
+			return episodes;
 		}
 		catch
 		{
@@ -60,14 +71,19 @@ public class DatasetFile
 	}
 
 	/// <summary>Serialize an episode list as an envelope stamped
-	/// with its universe — the only dataset form the app writes.</summary>
+	/// with its universe — the only dataset form the app writes.
+	/// Rows are link-normalized first (Decision 1G), so a written
+	/// dataset always carries the synced links + primeContentId
+	/// pair, whichever form its rows arrived in.</summary>
 	public static string Serialize(IReadOnlyList<Episode> episodes, string universe)
 	{
+		var rows = episodes as List<Episode> ?? new List<Episode>(episodes);
+		foreach (var ep in rows) LinkNormalization.Apply(ep);
 		var file = new DatasetFile
 		{
 			Universe = universe,
 			Version = 1,
-			Episodes = episodes as List<Episode> ?? new List<Episode>(episodes),
+			Episodes = rows,
 		};
 		return JsonSerializer.Serialize(file);
 	}

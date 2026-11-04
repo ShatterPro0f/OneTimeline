@@ -40,8 +40,58 @@ public class Episode
 	/// this field (Decision 1 as amended 2026-11-03). At runtime the
 	/// Store keeps it resolved to the effective ID — the user's
 	/// hand-saved override when one exists, else the dataset's link
-	/// (Store.PrimeIdFor). Empty means tracker-only.</summary>
+	/// (Store.PrimeIdFor). Empty means tracker-only.
+	///
+	/// Multi-platform (Decision 1G): this field is the LEGACY form
+	/// of a Prime link. New datasets express every playable ID in
+	/// <see cref="Links"/> with a platform signifier; at load, a
+	/// primeContentId with no links is normalized into a prime
+	/// link, so both shapes behave identically everywhere.</summary>
 	[JsonPropertyName("primeContentId")] public string PrimeContentId { get; set; } = "";
+
+	/// <summary>What kind of entry this is (Decision 1G): absent /
+	/// "episode" for an ordinary series episode; "movie" for a
+	/// film, Special Presentation, One-Shot or any other standalone
+	/// piece. The kind decides the deep-link mediaType the player
+	/// sends (see DeepLinkMediaType) — streaming services route
+	/// movies and episodes differently.</summary>
+	[JsonPropertyName("kind")] public string? Kind { get; set; }
+
+	/// <summary>The entry's content category (Sam's ruling,
+	/// 2026-11-04) — what KIND of content it is for the
+	/// per-universe category switches. Distinct from
+	/// <see cref="Kind"/>, which only drives the deep-link
+	/// mediaType. An explicit value in the dataset wins
+	/// ("special", "one-shot", "web" — the known values live in
+	/// EpisodeCategories); without one, the category is derived:
+	/// "film" for a movie entry, "episode" for everything else
+	/// (see EffectiveCategory). A user can hide a whole category
+	/// in a universe — its entries leave the tracker and Up Next
+	/// without losing any progress.</summary>
+	[JsonPropertyName("category")] public string? Category { get; set; }
+
+	/// <summary>The effective category: the explicit value,
+	/// normalized, or the derived one.</summary>
+	[JsonIgnore] public string EffectiveCategory =>
+		!string.IsNullOrWhiteSpace(Category)
+			? Category.Trim().ToLowerInvariant()
+			: IsMovieEntry ? "film" : "episode";
+
+	/// <summary>This entry's playable links, as shipped in the
+	/// dataset (Decision 1G): one entry per streaming platform
+	/// that carries it, in the pack author's priority order. The
+	/// Store resolves the EFFECTIVE links (these, with the user's
+	/// per-platform overrides applied) via Store.LinksFor — this
+	/// list itself always stays the dataset's own layer.</summary>
+	[JsonPropertyName("links")] public List<EpisodeLink> Links { get; set; } = new();
+
+	/// <summary>True for a standalone entry (film / special /
+	/// one-shot): its deep links go out with mediaType "movie".</summary>
+	[JsonIgnore] public bool IsMovieEntry => Kind == "movie";
+
+	/// <summary>The mediaType this entry's deep links carry:
+	/// "movie" for standalone entries, "episode" otherwise.</summary>
+	[JsonIgnore] public string DeepLinkMediaType => IsMovieEntry ? "movie" : "episode";
 
 	// Local state, not part of the shipped dataset.
 	[JsonIgnore] public bool Watched { get; set; }
@@ -131,4 +181,19 @@ public class Cameo
 {
 	[JsonPropertyName("show")] public string Show { get; set; } = "";
 	[JsonPropertyName("names")] public string Names { get; set; } = "";
+}
+
+/// <summary>
+/// One playable link for an episode (Decision 1G): a streaming
+/// platform signifier ("prime" / "netflix" / "disney") and that
+/// platform's own content ID for this episode, in the platform's
+/// native form — a Prime GTI, a Netflix episode watch-ID, a
+/// Disney+ entity UUID. The platform table (Services.Platforms)
+/// knows each signifier's channel name, ID rules and readback
+/// behaviour; nothing else in the app hardcodes a platform.
+/// </summary>
+public class EpisodeLink
+{
+	[JsonPropertyName("platform")] public string Platform { get; set; } = "";
+	[JsonPropertyName("id")] public string Id { get; set; } = "";
 }

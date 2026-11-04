@@ -148,6 +148,24 @@ public class DataRefreshService
 				if ((cameo.Show?.Length ?? 0) > MaxShowLength || (cameo.Names?.Length ?? 0) > MaxCameoTextLength) return false;
 			}
 			if (!string.IsNullOrEmpty(ep.PrimeContentId) && !Store.IsValidContentId(ep.PrimeContentId)) return false;
+			// The multi-platform fields (Decision 1G) face the same
+			// strictness: a known entry kind, and links that are few,
+			// on known platforms, formally valid for their platform,
+			// and at most one per platform.
+			if (ep.Kind != null && ep.Kind != "episode" && ep.Kind != "movie") return false;
+			if (ep.Category != null && !EpisodeCategories.IsKnown(ep.Category)) return false;
+			if (ep.Links is { Count: > 8 }) return false;
+			if (ep.Links != null)
+			{
+				var seenPlatforms = new HashSet<string>();
+				foreach (var link in ep.Links)
+				{
+					var platform = PlatformCatalog.Find(link?.Platform);
+					if (platform == null || link == null) return false;
+					if (!PlatformIdRules.IsValid(platform.Signifier, link.Id)) return false;
+					if (!seenPlatforms.Add(platform.Signifier)) return false;
+				}
+			}
 			if (string.IsNullOrWhiteSpace(ep.Key) || !keys.Add(ep.Key)) return false;
 			if (!identities.Add($"{ep.Show}|{ep.Season}|{ep.EpisodeNumber}")) return false;
 			if (!orders.Add(ep.Order)) return false;
@@ -205,6 +223,14 @@ public class DataRefreshService
 				// ID, which may be the user's own link; baking that
 				// into a dataset row would corrupt the layer order.
 				PrimeContentId = _store.GetDatasetContentId(ep.Key),
+				// The multi-platform fields ride through untouched
+				// (Decision 1G): the refresh contributes TVmaze
+				// metadata only — it never invents or drops the
+				// entry kind or its streaming links. The copies are
+				// pristine; overrides live in their own Store layer.
+				Kind = ep.Kind,
+				Category = ep.Category,
+				Links = (ep.Links ?? new List<EpisodeLink>()).Select(l => new EpisodeLink { Platform = l.Platform, Id = l.Id }).ToList(),
 			});
 		}
 		return rows;

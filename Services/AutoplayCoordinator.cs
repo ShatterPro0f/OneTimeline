@@ -6,7 +6,7 @@ public enum AutoplayPhase
 {
 	Idle,
 	CountingDown,
-	NoPrimeLink,
+	NoPlayableLink,
 	SessionLimitReached,
 }
 
@@ -17,9 +17,13 @@ public enum AutoplayPhase
 /// watched by the monitor — this coordinator handles what happens next:
 ///
 ///  - If autoplay is off, nothing.
-///  - If the new current episode has no Prime ID (e.g. Chicago Justice
-///    has no Prime listing in Canada), the hero shows a plain notice and
-///    NO commands are fired.
+///  - If the new current episode has no playable link (no links at
+///    all, or none of its platforms is on the TV — e.g. Chicago
+///    Justice has no Canadian streaming listing), the hero shows a
+///    plain notice and NO commands are fired. (Multi-platform,
+///    Decision 1G: the jump resolves the next episode's target
+///    through GuidedPlayer.ResolveTargetAsync, so an advance can
+///    switch streaming platforms — and TV channels — mid-order.)
 ///  - Otherwise a countdown runs on the hero ("Next: … — playing
 ///    in N s", with Cancel). Its length is Sam's Settings choice
 ///    (Store.AutoplayCountdownSeconds: free-form 0–600 s since
@@ -130,10 +134,10 @@ public class AutoplayCoordinator
 			StateChanged?.Invoke();
 			return;
 		}
-		if (string.IsNullOrWhiteSpace(_store.PrimeIdFor(next)))
+		if (_store.WatchLinksFor(next).Count == 0)
 		{
 
-			Phase = AutoplayPhase.NoPrimeLink;
+			Phase = AutoplayPhase.NoPlayableLink;
 			StateChanged?.Invoke();
 			return;
 		}
@@ -183,9 +187,23 @@ public class AutoplayCoordinator
 
 			return;
 		}
+		// Resolve the target at fire time (Decision 1G): the next
+		// episode's first link whose platform is on the TV — which
+		// may be a different platform, and channel, than the
+		// episode that just finished. No resolvable target (its
+		// channels aren't installed, or the TV can't be asked)
+		// lands on the same plain notice as having no link.
+		var resolution = await _player.ResolveTargetAsync(next);
+		if (resolution.Target is not { } target)
+		{
+			PendingEpisode = next;
+			Phase = AutoplayPhase.NoPlayableLink;
+			StateChanged?.Invoke();
+			return;
+		}
 		_jumpsThisSession++; // a jump that actually fires counts toward the session limit
 
-		await _player.PlayAsync(next, _store.PrimeIdFor(next), next.Headline);
+		await _player.PlayAsync(next, target, next.Headline);
 	}
 
 	/// <summary>A manual Play Now tap starts a new autoplay session:

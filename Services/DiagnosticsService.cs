@@ -13,8 +13,9 @@ namespace OneChicago.Services;
 ///
 /// Redaction rules (audit §3, applied here — the single place
 /// diagnostics text is produced):
-///  - Prime Video IDs are never printed in full: an episode's code
-///    plus the ID's first characters and a short hash of the ID.
+///  - Streaming IDs (Prime GTIs, Netflix watch IDs, Disney+
+///    UUIDs) are never printed in full: an episode's code plus the
+///    ID's first characters and a short hash of the ID.
 ///  - The TV's address is never printed — only whether one is set.
 ///  - The Roku serial number never appears (the device summary this
 ///    reuses already excludes it).
@@ -76,21 +77,27 @@ public static class DiagnosticsService
 		sb.AppendLine(next != null ? $"Up next: {next.Headline}" : "Up next: none — the watch order is complete");
 		sb.AppendLine();
 
-		// The user's own saved Prime links: count, then each episode
-		// identified by code with only the ID's first characters and
-		// a short hash — enough to correlate with a support report,
-		// never enough to use.
-		var overrides = store.Episodes
-			.Where(e => store.GetPrimeOverride(e.Key) != null)
+		// The user's own saved links (multi-platform, Decision
+		// 1G): count, then each episode identified by code with,
+		// per platform, only the ID's masked head and a short hash
+		// — enough to correlate with a support report, never enough
+		// to use. Full IDs never appear here, on any platform.
+		var linkOverrides = store.AllLinkOverrides().ToList();
+		var overriddenKeys = linkOverrides.Select(o => o.Key).ToHashSet();
+		var overriddenEps = store.Episodes
+			.Where(e => overriddenKeys.Contains(e.Key))
 			.ToList();
-		sb.AppendLine($"Your Prime Video links: {overrides.Count} saved");
-		foreach (var ep in overrides.Take(25))
+		sb.AppendLine($"Your saved links: {linkOverrides.Count} saved");
+		foreach (var ep in overriddenEps.Take(25))
 		{
-			var id = store.GetPrimeOverride(ep.Key)!;
-			sb.AppendLine($"  {ep.DisplayShow} {ep.Code} — {MaskId(id)} (id hash {ShortHash(id)})");
+			var parts = linkOverrides
+				.Where(o => o.Key == ep.Key)
+				.OrderBy(o => o.Platform)
+				.Select(o => $"{PlatformCatalog.Find(o.Platform)?.DisplayName ?? o.Platform} {MaskIdFor(o.Platform, o.Id)} (id hash {ShortHash(o.Id)})");
+			sb.AppendLine($"  {ep.DisplayShow} {ep.Code} — {string.Join(" · ", parts)}");
 		}
-		if (overrides.Count > 25)
-			sb.AppendLine($"  …and {overrides.Count - 25} more");
+		if (overriddenEps.Count > 25)
+			sb.AppendLine($"  …and {overriddenEps.Count - 25} more");
 		sb.AppendLine();
 
 		// Settings summary.
@@ -105,12 +112,37 @@ public static class DiagnosticsService
 		sb.AppendLine($"  TV check interval: {store.PollSeconds} s · profile select: {OnOff(store.ProfileSelectEnabled)}");
 		sb.AppendLine($"  Theme: {store.ThemeId} · spoiler guard: {OnOff(store.SpoilerGuardEnabled)}");
 		sb.AppendLine($"  Setup completed: {OnOff(store.SetupCompleted)}");
+		// My Services (2026-11-04): platform names only — a
+		// household fact the user picked, nothing sensitive.
+		var myServices = PlatformCatalog.All
+			.Where(p => store.HasService(p.Signifier))
+			.Select(p => p.DisplayName);
+		sb.AppendLine($"  My services: {string.Join(", ", myServices.DefaultIfEmpty("(none)"))}");
+		// Hidden content categories per universe (2026-11-04):
+		// category names only, and only where any are hidden.
+		foreach (var u in UniverseCatalogue.All)
+		{
+			var hidden = EpisodeCategories.Known.Where(c => store.CategoryHidden(u.Id, c)).ToList();
+			if (hidden.Count > 0)
+				sb.AppendLine($"  Hidden in {u.DisplayName}: {string.Join(", ", hidden)}");
+		}
 
 		var text = sb.ToString().TrimEnd();
 		if (text.Length > MaxChars)
 			text = text.Substring(0, MaxChars - 20).TrimEnd() + "\n…(truncated)";
 		return text;
 	}
+
+	/// <summary>Mask a saved link's ID by its platform: a Netflix
+	/// watch ID shows its first digits only, a Disney+ UUID its
+	/// first segment only, Prime the GTI mask below. Never the
+	/// full ID, on any platform.</summary>
+	private static string MaskIdFor(string platform, string id) => platform switch
+	{
+		PlatformCatalog.NetflixSignifier => Shorten(id, 3) + "…",
+		PlatformCatalog.DisneySignifier => Shorten(id, 8) + "…",
+		_ => MaskId(id),
+	};
 
 	/// <summary>"amzn1.dv.gti.33a0…" — the constant prefix plus the
 	/// first four characters of the unique part. Never the full ID.</summary>

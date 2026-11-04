@@ -145,6 +145,7 @@
                             <Label Text="{Binding Title}" FontSize="16" TextColor="{Binding TitleColor}" MaxLines="1" LineBreakMode="TailTruncation" />
                             <Label FormattedText="{Binding SubFormatted}" FontSize="13" />
                             <Label Text="{Binding EventPill}" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThPillText}" IsVisible="{Binding HasEvent}" />
+                            <Label Text="{Binding LinksBadge}" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThAccent}" IsVisible="{Binding HasLinks}" />
                         </VerticalStackLayout>
                         <Label Grid.Column="2" Text="›" TextColor="{DynamicResource ThChevron}" FontSize="20" VerticalOptions="Center" />
                     </Grid>
