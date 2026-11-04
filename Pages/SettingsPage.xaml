@@ -67,6 +67,13 @@
             <VerticalStackLayout x:Name="UniverseList" Spacing="0" />
             <Label x:Name="UniverseNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
 
+            <!-- GET MORE UNIVERSES (downloadable packs, shared with setup) -->
+            <Label Text="GET MORE UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Universes download right here — no app update needed. Removing a downloaded universe deletes its episode list from this phone but keeps your progress in it: download it again and everything is where you left it." />
+            <VerticalStackLayout x:Name="PackList" Spacing="0" />
+            <Label x:Name="PackNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
+
             <!-- CONTENT TYPES (hidden unless a universe mixes categories) -->
             <Label x:Name="CategoryHeaderLabel" Text="CONTENT TYPES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" IsVisible="False" />
             <Label x:Name="CategoryExplainerLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" IsVisible="False"

@@ -7,3 +7,9 @@ obj/
 *.suo
 *.userosscache
 *.sln.docstates
+
+# Release signing material — never commit
+Signing.local.props
+*.jks
+*.keystore
+release-key/

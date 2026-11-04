@@ -8,9 +8,10 @@ namespace OneChicago.Pages;
 /// catalogued universe — name, shows line, episode count, and an
 /// Include switch bound straight to the Store's one selection
 /// state, so the two surfaces can never disagree. The active
-/// universe's row says so. Turning off the last included universe
-/// is refused by the Store; the switch snaps back on rebuild and
-/// the note label explains why, in plain words.
+/// universe's row says so. Since v2.1.0 the catalogue holds only
+/// INSTALLED packs (a fresh install's list is empty until the
+/// pack picker above downloads some), and exclusion is never
+/// refused — an install may legitimately include nothing.
 /// </summary>
 public static class UniverseSection
 {

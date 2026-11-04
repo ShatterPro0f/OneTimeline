@@ -26,6 +26,11 @@ public static class BoundedRead
 	/// hundred KB at most; 2 MB is the audit's suggested cap.</summary>
 	public const int ImportCapBytes = 2 * 1024 * 1024;
 
+	/// <summary>The downloadable-pack index (Decision 1J): a list
+	/// of pack entries is a few KB even with dozens of packs;
+	/// 256 KB is generous headroom.</summary>
+	public const int PackIndexCapBytes = 256 * 1024;
+
 	/// <summary>GET a URL and read the body as a string, failing if
 	/// it exceeds <paramref name="maxBytes"/>.</summary>
 	public static async Task<string> GetStringAsync(HttpClient http, string url, int maxBytes, CancellationToken ct = default)
@@ -60,5 +65,44 @@ public static class BoundedRead
 			ms.Write(buffer, 0, read);
 		}
 		return Encoding.UTF8.GetString(ms.ToArray());
+	}
+
+	/// <summary>GET a URL and read the body as bytes, failing if
+	/// it exceeds <paramref name="maxBytes"/>. The byte form exists
+	/// for the pack downloads (Decision 1J): the SHA-256 check runs
+	/// over the exact bytes received, before anything is decoded
+	/// or parsed.</summary>
+	public static async Task<byte[]> GetBytesAsync(HttpClient http, string url, int maxBytes, CancellationToken ct = default)
+	{
+		using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+		resp.EnsureSuccessStatusCode();
+		return await ReadContentBytesAsync(resp.Content, maxBytes, ct);
+	}
+
+	/// <summary>Read an HttpContent body as bytes with a hard byte
+	/// cap (checks Content-Length up front when present, then
+	/// counts while streaming).</summary>
+	public static async Task<byte[]> ReadContentBytesAsync(HttpContent content, int maxBytes, CancellationToken ct = default)
+	{
+		if (content.Headers.ContentLength is long len && len > maxBytes)
+			throw new InvalidDataException($"Response is {len} bytes, over the {maxBytes}-byte cap.");
+		using var stream = await content.ReadAsStreamAsync(ct);
+		return await ReadStreamBytesAsync(stream, maxBytes, ct);
+	}
+
+	/// <summary>Read a stream to its end as bytes, failing the
+	/// moment more than <paramref name="maxBytes"/> have arrived.</summary>
+	public static async Task<byte[]> ReadStreamBytesAsync(Stream stream, int maxBytes, CancellationToken ct = default)
+	{
+		using var ms = new MemoryStream();
+		var buffer = new byte[16 * 1024];
+		int read;
+		while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+		{
+			if (ms.Length + read > maxBytes)
+				throw new InvalidDataException($"Content exceeds the {maxBytes}-byte cap.");
+			ms.Write(buffer, 0, read);
+		}
+		return ms.ToArray();
 	}
 }

@@ -20,19 +20,50 @@ Also checked, for every eventGroup in every dataset:
     It is not the 'Part 1 of 1' defect and Chicago data is not
     this guard's to change.
 
+GENERAL GUARDS (added 2026-11-04 with the MCU pack, Decision 1G):
+for every dataset, hard fail on
+  - order values not forming exactly 1..N (gapless, unique)
+  - duplicate episode keys, or a key that does not equal
+    "<show>|<season>|<episodeNumber>"
+  - a links[] entry whose platform is not prime/netflix/disney,
+    whose ID does not match the platform's form (Prime GTI,
+    Netflix bare numeric ID, Disney+ bare UUID), or more than
+    one link for the same platform on one entry — the legacy
+    primeContentId field counts as a prime link here
+  - the same (platform, ID) pair appearing on two entries
+  - a category value outside film/episode/special/one-shot/web
+Entries with no runtimeMinutes are reported as a warning count
+(web extras and unreleased episodes legitimately lack one).
+
 Usage: validate_datasets.py [dataset.json ...]
-With no arguments it validates the two SHIPPED datasets (the
-copies in the production project's Resources/Raw). Exit code is
+With no arguments it validates the three SHIPPED datasets (the
+masters in ~/workspace/one-chicago/ — since v2.1.0 every
+universe ships as a downloadable pack, never embedded). Exit code is
 nonzero if any check fails.
 """
 import json
+import os
+import re
 import sys
 from collections import defaultdict
 
+# Repo copy: the downloadable packs live in packs/ beside tools/.
+# (The workspace copy of this script defaults to the pipeline
+# masters instead; the rules are identical.)
+_PACKS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "packs")
 DEFAULTS = [
-    "/home/hatch/workspace/projects/one-chicago-production/Resources/Raw/episodes.json",
-    "/home/hatch/workspace/projects/one-chicago-production/Resources/Raw/episodes-csi.json",
+    os.path.join(_PACKS_DIR, "episodes.json"),
+    os.path.join(_PACKS_DIR, "episodes-csi.json"),
 ]
+
+LINK_ID_FORMS = {
+    "prime": re.compile(r"^amzn1\.dv\.gti\.[0-9a-fA-F-]{36}$"),
+    "netflix": re.compile(r"^\d{5,12}$"),
+    "disney": re.compile(
+        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+}
+CATEGORIES = {"film", "episode", "special", "one-shot", "web"}
 
 
 def validate(path):
@@ -42,6 +73,72 @@ def validate(path):
     problems = []
     warnings = []
 
+    # --- order sanity: exactly 1..N, gapless ---
+    orders = sorted(ep.get("order") for ep in episodes)
+    if orders != list(range(1, len(episodes) + 1)):
+        problems.append(
+            f"order values are not exactly 1..{len(episodes)} "
+            f"(gapless, unique)")
+
+    # --- keys: unique and consistent with show/season/episode ---
+    seen_keys = set()
+    for ep in episodes:
+        key = ep.get("key")
+        if key in seen_keys:
+            problems.append(f"duplicate key {key!r}")
+        seen_keys.add(key)
+        expect = f"{ep.get('show')}|{ep.get('season')}|{ep.get('episodeNumber')}"
+        if key != expect:
+            problems.append(f"key {key!r} != expected {expect!r}")
+
+    # --- links: platform forms, one per platform, no dup IDs ---
+    seen_links = {}
+    n_links = 0
+    for ep in episodes:
+        effective = list(ep.get("links") or [])
+        if ep.get("primeContentId"):
+            effective.append({"platform": "prime",
+                                "id": ep["primeContentId"]})
+        per_platform = defaultdict(int)
+        for link in effective:
+            platform, lid = link.get("platform"), link.get("id") or ""
+            per_platform[platform] += 1
+            n_links += 1
+            form = LINK_ID_FORMS.get(platform)
+            if form is None:
+                problems.append(
+                    f"{ep['key']}: unknown link platform {platform!r}")
+            elif not form.match(lid):
+                problems.append(
+                    f"{ep['key']}: {platform} link ID {lid!r} does not "
+                    f"match the platform's ID form")
+            pair = (platform, lid)
+            if pair in seen_links:
+                problems.append(
+                    f"duplicate {platform} ID {lid!r} on {ep['key']} "
+                    f"and {seen_links[pair]}")
+            seen_links[pair] = ep["key"]
+        for platform, count in per_platform.items():
+            if count > 1:
+                problems.append(
+                    f"{ep['key']}: {count} links for platform "
+                    f"{platform!r} (max one)")
+
+    # --- categories ---
+    for ep in episodes:
+        cat = ep.get("category")
+        if cat is not None and cat not in CATEGORIES:
+            problems.append(f"{ep['key']}: unknown category {cat!r}")
+
+    # --- runtimes: warning only ---
+    no_runtime = [ep["key"] for ep in episodes
+                  if not ep.get("runtimeMinutes")]
+    if no_runtime:
+        warnings.append(
+            f"{len(no_runtime)} entries have no runtimeMinutes "
+            f"(first: {', '.join(no_runtime[:5])})")
+
+    # --- event guards (the original regression checks) ---
     groups = defaultdict(list)
     for ep in episodes:
         flagged = [ep.get(f) is not None
@@ -71,7 +168,7 @@ def validate(path):
     n_flagged = sum(len(v) for v in groups.values())
     n_cameos = sum(1 for ep in episodes if ep.get("cameos"))
     status = "PASS" if not problems else "FAIL"
-    print(f"{status}  {path}: {len(episodes)} episodes, "
+    print(f"{status}  {path}: {len(episodes)} episodes, {n_links} links, "
           f"{len(groups)} event groups / {n_flagged} flagged, "
           f"{n_cameos} cameo episodes")
     for p in problems:

@@ -11,6 +11,16 @@
             <Label FontSize="15" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
                    Text="A minute of setup — every step is optional, and everything here can be changed later in Settings." />
 
+            <!-- CHOOSE YOUR UNIVERSES (downloadable packs — setup starts empty) -->
+            <Label Text="CHOOSE YOUR UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,2" />
+            <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
+                   Text="One Timeline starts empty — no universes are built in. Pick the ones you watch and download them now; each is a one-time download, and more can be added any time in Settings. Prefer to look around first? Skip this step entirely." />
+            <VerticalStackLayout x:Name="PackList" Spacing="0" Margin="0,4,0,0" />
+            <Label x:Name="PackNoteLabel" FontSize="13" TextColor="{DynamicResource ThVerdictWarn}" LineBreakMode="WordWrap" IsVisible="False" />
+            <Button x:Name="SkipPacksButton" Text="Skip for now" Clicked="OnSkipPacks"
+                    BackgroundColor="Transparent" TextColor="{DynamicResource ThAccent}" FontSize="15"
+                    HeightRequest="40" Padding="0" HorizontalOptions="Start" />
+
             <!-- UNIVERSES -->
             <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,22,0,2" />
             <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"

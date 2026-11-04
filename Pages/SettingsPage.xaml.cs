@@ -96,6 +96,20 @@ public partial class SettingsPage : ContentPage
 			_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
 		});
 		_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		// The downloadable-pack manager (PackSection — shared
+		// with setup's picker). Installing or removing a pack
+		// changes the catalogue itself, so the universe rows and
+		// the category blocks rebuild through the callback.
+		_ = PackSection.BuildAsync(PackList, PackNoteLabel, PackSectionMode.Manager, () =>
+		{
+			RefreshDataLabel();
+			_ = UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, () =>
+			{
+				RefreshDataLabel();
+				_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+			});
+			_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		}, async (title, message) => await DisplayAlert(title, message, "Remove", "Cancel"));
 		// The My Services rows (shared with setup —
 		// MyServicesSection), bound to the same Store state.
 		MyServicesSection.Build(ServicesList);

@@ -18,8 +18,8 @@
 		<ApplicationId>app.onetimeline</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
-		<ApplicationVersion>13</ApplicationVersion>
+		<ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>14</ApplicationVersion>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
@@ -34,9 +34,16 @@
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
 
-		<!-- Raw Assets (also remove the "Resources\Raw" prefix).
-		     episodes.json lands in the APK with logical name "episodes.json". -->
+		<!-- Raw Assets (also remove the "Resources\Raw" prefix). -->
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+		<!-- Universe datasets are NEVER embedded (Decision 1J,
+		     Sam's ruling 2026-11-04): every pack — One Chicago
+		     and CSI included — installs from the downloadable
+		     pack index, and a fresh install starts with no
+		     universes at all. Dataset files may sit in
+		     Resources\Raw as pipeline work-in-progress; they
+		     must not reach the APK. -->
+		<MauiAsset Remove="Resources\Raw\episodes*.json" />
 	</ItemGroup>
 
 	<PropertyGroup>

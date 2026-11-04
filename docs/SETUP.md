@@ -10,7 +10,7 @@
 
 The setup flow is skippable at every step, and everything in it can be changed later in Settings.
 
-1. **Universes** — choose which universes to include. One Chicago is included by default; as more universes are added they'll appear here, each with its own separate progress. The same list lives in Settings, so you can change your mind any time. At least one universe must stay included.
+1. **Choose your universes** — the app starts empty: pick the universe packs you watch and download them (each is a one-time download from this repository). This step can be skipped entirely — packs can be added any time later in Settings, under **Get more universes**. Right below it, the **Universes** list chooses which of your downloaded packs to include; each keeps its own separate progress, and the same list lives in Settings.
 2. **Starting point** — if you've already watched some of the universe, pick where you are and everything before it is marked watched. Nothing is pre-marked for you.
 3. **Connect your TV (optional)** — tap **Find My TV** to discover a Roku TV on your home network, or enter its local IP address by hand and tap **Check connection**.
    - The TV and the phone must be on the **same network**.

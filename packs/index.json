@@ -1,0 +1,22 @@
+{
+  "packs": [
+    {
+      "id": "one-chicago",
+      "displayName": "One Chicago",
+      "showsLine": "Chicago Fire · Chicago P.D. · Chicago Med · Chicago Justice — plus FBI & Law & Order: SVU crossovers",
+      "episodeCount": 846,
+      "file": "episodes.json",
+      "sha256": "f3a6351616fa9fc520ba14619f394f3dcb0ef8cf5ceab63ae3a8f7323801b4cc",
+      "dataVersion": 1
+    },
+    {
+      "id": "csi",
+      "displayName": "CSI",
+      "showsLine": "CSI: Crime Scene Investigation · CSI: Miami · CSI: NY · CSI: Cyber · CSI: Vegas — plus a Without a Trace crossover",
+      "episodeCount": 839,
+      "file": "episodes-csi.json",
+      "sha256": "9a5256893463b6c7448d7ce9f9db8a35c509c793cd9a6b64886ee4dd3b347da2",
+      "dataVersion": 1
+    }
+  ]
+}

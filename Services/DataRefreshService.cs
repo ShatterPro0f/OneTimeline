@@ -27,7 +27,9 @@ namespace OneChicago.Services;
 /// used: it is the broadcast slot length (typically 60 minutes),
 /// not the episode's actual length, and the completion detection
 /// judges episode endings against runtimes — the shipped factual
-/// runtimes stay authoritative.
+/// runtimes stay authoritative. (Entries whose category is web,
+/// one-shot or special may legitimately carry no runtime at all
+/// — see ValidateDataset's category-aware runtime rule.)
 ///
 /// The refresh starts from the currently loaded dataset and produces
 /// a copy with TVmaze's metadata merged in by episode identity. The
@@ -75,7 +77,7 @@ public class DataRefreshService
 		// the refresh genuinely never runs for it, and no attempt is
 		// recorded against it. (Chicago, the only mapped universe
 		// today, runs exactly the shipped behaviour below.)
-		if (_store.ActiveUniverse.TvMazeShowIds == null) return;
+		if (_store.ActiveUniverse?.TvMazeShowIds == null) return;
 		if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) return;
 		try
 		{
@@ -117,7 +119,9 @@ public class DataRefreshService
 	/// caps; descriptions and cameos capped; episode identity (key
 	/// AND show|season|episode) and order are unique; season /
 	/// episode / order numbers and runtimes sit in plausible ranges
-	/// (shipped runtimes span 39–120 min; 5–600 allowed); event
+	/// (film/episode runtimes: present, 5–600; the short-form
+	/// categories web/one-shot/special: optional, 1–600 when
+	/// present); event
 	/// indices sane. Any Prime ID present in a dataset row must be a
 	/// strict GTI (the launch universe ships its links in the
 	/// dataset; the user's own further IDs live outside it, as
@@ -173,7 +177,23 @@ public class DataRefreshService
 			if (ep.EpisodeNumber is < 1 or > 999) return false;
 			if (ep.Order is < 1 or > 100_000) return false;
 			if (ep.SheetNumber is < 0 or > 100_000) return false;
-			if (ep.RuntimeMinutes is not (>= 5 and <= 600)) return false;
+			// Runtime rule, category-aware (amended 2026-11-04
+			// for the MCU pack): film/episode entries keep the
+			// strict rule — a present runtime within 5–600 —
+			// because end detection judges episode endings
+			// against it, and a missing one is a data defect.
+			// The short-form categories (web, one-shot, special)
+			// may honestly have NO published runtime (the MCU's
+			// web extras ship that way) and genuine shorts run
+			// 1–4 minutes (the Team Thor pieces): null is
+			// tolerated there, and a present runtime may go down
+			// to 1 minute. The 600 cap applies to everything.
+			var category = ep.EffectiveCategory;
+			if (category is "web" or "one-shot" or "special")
+			{
+				if (ep.RuntimeMinutes is int shortRuntime && (shortRuntime < 1 || shortRuntime > 600)) return false;
+			}
+			else if (ep.RuntimeMinutes is not (>= 5 and <= 600)) return false;
 			if (ep.EventIndex is int ei && (ei < 1 || ei > 20)) return false;
 			if (ep.EventTotal is int et && (et < 1 || et > 20)) return false;
 			if (ep.EventIndex is int ei2 && ep.EventTotal is int et2 && ei2 > et2) return false;
@@ -272,7 +292,7 @@ public class DataRefreshService
 		var output = new Dictionary<string, TvInfo>();
 		// The ACTIVE universe's declared mapping; RefreshOnStartAsync
 		// has already gated on it being present.
-		var showIds = _store.ActiveUniverse.TvMazeShowIds;
+		var showIds = _store.ActiveUniverse?.TvMazeShowIds;
 		if (showIds == null) return output;
 		foreach (var (show, sid) in showIds)
 		{

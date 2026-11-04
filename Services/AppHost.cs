@@ -34,5 +34,14 @@ public static class AppHost
 		// the background, never blocks first paint, and a failure
 		// leaves the loaded dataset exactly as it is.
 		_ = Refresher.RefreshOnStartAsync();
+		// Upgrade restore (v2.1.0): universes an install from a
+		// pre-download build had included, whose packs aren't on
+		// the device yet, re-download in the background — progress
+		// sits untouched in state and goes live as each pack lands.
+		// Fire-and-forget and silent; whatever can't be fetched
+		// stays visibly pending in Settings' pack manager with a
+		// retry button. A fresh install has nothing pending.
+		if (Store.PendingRestoreIds.Count > 0)
+			_ = PackService.RestorePendingAsync(Store);
 	}
 }

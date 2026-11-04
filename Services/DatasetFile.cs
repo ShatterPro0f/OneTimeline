@@ -32,42 +32,92 @@ public class DatasetFile
 {
 	[JsonPropertyName("universe")] public string Universe { get; set; } = "";
 	[JsonPropertyName("version")] public int Version { get; set; } = 1;
+
+	/// <summary>The universe's display name, declared by the pack
+	/// itself (Decision 1J + Sam's unification ruling, 2026-11-04:
+	/// EVERY pack — the ones that once shipped inside the app and
+	/// downloaded ones alike — carries the same self-describing
+	/// envelope, and the app registers universes from these fields,
+	/// never from code). Optional in the format so embedded-era
+	/// files still parse; a pack offered for download must carry
+	/// it (the installer rejects one that doesn't).</summary>
+	[JsonPropertyName("displayName")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? DisplayName { get; set; }
+
+	/// <summary>One line naming the pack's shows, also declared by
+	/// the pack itself; shown wherever universes are listed.</summary>
+	[JsonPropertyName("showsLine")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public string? ShowsLine { get; set; }
+
+	/// <summary>The pack's TVmaze show-id map for the metadata
+	/// refresh (dataset show name → TVmaze show id). A null VALUE
+	/// names a show the pack deliberately leaves unmapped; a null
+	/// MAP means the pack has no refresh at all.</summary>
+	[JsonPropertyName("tvMazeShowIds")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public Dictionary<string, int?>? TvMazeShowIds { get; set; }
+
 	[JsonPropertyName("episodes")] public List<Episode> Episodes { get; set; } = new();
 
-	/// <summary>Parse dataset JSON (embedded seed or a device copy)
-	/// into its episode list, or null if the text isn't a usable
-	/// dataset for <paramref name="expectedUniverse"/>.</summary>
-	public static List<Episode>? Parse(string json, string expectedUniverse)
+	/// <summary>True when the parsed text was a legacy bare episode
+	/// array rather than an envelope (set by ParseEnvelope; never
+	/// serialized).</summary>
+	[JsonIgnore] public bool WasBareArray { get; private set; }
+
+	/// <summary>Parse dataset JSON into its full envelope —
+	/// metadata and episodes together — or null if the text isn't
+	/// a usable dataset at all. A legacy bare array parses as an
+	/// envelope with no metadata (Universe ""). Episode rows are
+	/// link-normalized exactly as in <see cref="Parse"/>.</summary>
+	public static DatasetFile? ParseEnvelope(string json)
 	{
 		if (string.IsNullOrWhiteSpace(json)) return null;
 		try
 		{
-			List<Episode>? episodes;
+			DatasetFile? file;
 			var trimmed = json.TrimStart();
 			if (trimmed.StartsWith("["))
 			{
 				// Legacy bare array (pre-envelope device copy).
-				episodes = JsonSerializer.Deserialize<List<Episode>>(json);
+				var episodes = JsonSerializer.Deserialize<List<Episode>>(json);
+				if (episodes == null) return null;
+				file = new DatasetFile { Universe = "", Episodes = episodes, WasBareArray = true };
 			}
 			else
 			{
-				var file = JsonSerializer.Deserialize<DatasetFile>(json);
+				file = JsonSerializer.Deserialize<DatasetFile>(json);
 				if (file == null) return null;
-				if (!string.Equals(file.Universe, expectedUniverse, StringComparison.Ordinal)) return null;
-				episodes = file.Episodes;
 			}
 			// Multi-platform normalization (Decision 1G): a legacy
 			// primeContentId becomes a prime link here, at the
 			// boundary, so every consumer downstream sees one
 			// uniform links shape whatever form the file used.
-			if (episodes != null)
-				foreach (var ep in episodes) LinkNormalization.Apply(ep);
-			return episodes;
+			foreach (var ep in file.Episodes) LinkNormalization.Apply(ep);
+			return file;
 		}
 		catch
 		{
 			return null;
 		}
+	}
+
+	/// <summary>Parse dataset JSON (an installed pack file or a
+	/// refreshed device copy) into its episode list, or null if
+	/// the text isn't a usable dataset for
+	/// <paramref name="expectedUniverse"/>.</summary>
+	public static List<Episode>? Parse(string json, string expectedUniverse)
+	{
+		var file = ParseEnvelope(json);
+		if (file == null) return null;
+		// A bare array carries no universe stamp: it is treated as
+		// this universe, as pre-envelope device copies always were.
+		// An envelope must name the expected universe exactly.
+		if (!file.WasBareArray
+			&& !string.Equals(file.Universe, expectedUniverse, StringComparison.Ordinal))
+			return null;
+		return file.Episodes;
 	}
 
 	/// <summary>Serialize an episode list as an envelope stamped

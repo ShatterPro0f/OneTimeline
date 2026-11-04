@@ -2,11 +2,11 @@
 
 A **universe** in One Timeline is a pack of interwoven series presented as **one chronological watch order**: every episode of every show in the universe, sequenced the way the story actually unfolds, crossovers included. One Chicago is the first universe. This file is the complete instruction for authoring another one.
 
-Right now, universes are authored as **data files** (below) and included in the app through a release. An in-app universe creator is planned; the file format documented here is the same format that creator will produce, so a universe authored by hand today stays valid.
+Universes are authored as **data files** (below) and published as **downloadable packs**: the app ships with no universes built in, and every pack — including One Chicago and CSI, the two that once shipped inside it — is downloaded from the pack index and registered from its own file. There is one format and one registration path for every universe, and this document describes it. An in-app universe creator is planned; the file format documented here is the same format that creator will produce, so a universe authored by hand today stays valid.
 
 ## The golden rule: document your sources
 
-**A universe is only added to the release package if it comes with a sources document.** No exceptions, including for the maintainer — the One Chicago pack's own document, [ONE-CHICAGO-SOURCES.md](ONE-CHICAGO-SOURCES.md), is the standard to match.
+**A universe is only added to the pack index if it comes with a sources document.** No exceptions, including for the maintainer — the One Chicago pack's own document, [ONE-CHICAGO-SOURCES.md](ONE-CHICAGO-SOURCES.md), is the standard to match.
 
 For **each kind of data** in your universe (watch order, titles, descriptions, episode links, runtimes, crossover flags), the sources document must state:
 
@@ -25,13 +25,21 @@ A universe is one JSON file with this envelope:
 {
   "universe": "arrowverse",
   "version": 1,
+  "displayName": "Arrowverse",
+  "showsLine": "Arrow · The Flash · Supergirl · Legends of Tomorrow — plus Constantine and Superman & Lois",
+  "tvMazeShowIds": { "Arrow": 4, "The Flash": 13 },
   "credit": "Optional but encouraged: who compiled this universe and from what headline sources.",
   "episodes": [ ... ]
 }
 ```
 
+The envelope is **self-describing**: the app registers a universe from these fields alone — there is no list of universes in the app's code, for any pack, whoever publishes it.
+
 - `universe` — a short lowercase ID, unique per universe (`one-chicago` is taken). Letters, digits, and hyphens.
 - `version` — currently `1`.
+- `displayName` — **required for a downloadable pack.** The universe's name, shown wherever universes are listed. The app refuses a pack whose envelope doesn't declare one: a pack must describe itself.
+- `showsLine` — one line naming the universe's shows, shown under its name wherever universes are listed.
+- `tvMazeShowIds` — optional: the TVmaze show-id map the app's metadata refresh uses (dataset show name → TVmaze show id). A show may be mapped to `null` to name it as deliberately unmapped. Omit the field entirely for a pack with no refresh — its data then stays exactly as published.
 - `episodes` — the episodes **in watch order**. The array order is presentational only; the `order` field (below) is what the app sorts by.
 
 ### Episode fields
@@ -46,7 +54,7 @@ A universe is one JSON file with this envelope:
 | `code` | **Yes** | Display code within the show, e.g. `1x01`, `3x08`. |
 | `title` | **Yes** | The episode's title. Use a placeholder like `TBA` only for genuinely unannounced episodes. |
 | `airDate` | No | Original air date, `YYYY-MM-DD`. |
-| `runtimeMinutes` | No | The episode's **true content runtime** in minutes (see the warning below). |
+| `runtimeMinutes` | No* | The episode's **true content runtime** in minutes (see the warning below). *Required, 5–600, for `film`/`episode` entries; optional for the short-form categories (`web`, `one-shot`, `special`), where a present value may be as low as 1. |
 | `description` | No | A short episode synopsis. Only include descriptions you have the right to use, and credit their source in your sources document (the Chicago pack's are TVmaze's, CC BY-SA, and are credited in the app). |
 | `kind` | No | `"movie"` for a standalone entry — a film, a Special Presentation, a One-Shot — and absent (or `"episode"`) for a series episode. The kind decides the deep-link media type the app sends (`movie` vs `episode`); streaming services route the two differently. |
 | `category` | No | The entry's content category, for the user's per-universe category switches: one of `film`, `episode`, `special`, `one-shot`, `web`. Only set it when the derivation (below) would be wrong — most entries need no `category` field at all. See **Content categories**. |
@@ -58,7 +66,7 @@ A universe is one JSON file with this envelope:
 | `eventTotal` | No | How many episodes the event group has in total. **Must be ≥ 2** — a group of one is not an event (see the event rule below). |
 | `cameos` | No | Notable guest appearances as short strings, e.g. `["Trask (SVU)"]`. Factual appearance data only. |
 
-**Runtime warning.** `runtimeMinutes` must be the length of the episode itself (≈42 minutes for an hour-long drama), **not** the broadcast slot length (60). The app judges episode endings against this number; slot lengths silently break end detection. If you don't have true runtimes, omit the field rather than guessing.
+**Runtime warning.** `runtimeMinutes` must be the length of the episode itself (≈42 minutes for an hour-long drama), **not** the broadcast slot length (60). The app judges episode endings against this number; slot lengths silently break end detection. For ordinary episodes and films, if you don't have true runtimes, omit the field rather than guessing — but know the app's validation treats a missing runtime on a `film`/`episode` entry as a defect and refuses the pack. The short-form categories are the honest exception: web extras, one-shots and specials may have no published runtime at all (leave the field out), and genuine shorts of 1–4 minutes are accepted as-is.
 
 ### Streaming links
 
@@ -110,6 +118,33 @@ Ship it beside the universe file, named `<universe>-SOURCES.md` (the Chicago one
    - the universe JSON file, and
    - its sources document.
 2. The maintainer checks: the file validates against this spec (unique keys, gapless `order`, matching `key`/`show`/`season`/`episodeNumber`), the counts are sane, the sources document is complete, and credits are present.
-3. If it passes, the universe is registered in the app's catalogue and ships in a release, where it appears in the setup and Settings universe lists like any other.
+3. If it passes, the universe is published as a downloadable pack (next section) and appears in the app's setup picker and Settings pack manager — no app release is involved.
 
 Universes that arrive without a complete sources document are not merged — that's the rule the Chicago pack itself is held to.
+
+## Publishing a downloadable pack
+
+Since v2.1.0 the app ships with **no universes at all**. Every universe — the maintainer's own included — reaches users the same way:
+
+1. **The dataset file** goes in the repository's `packs/` folder (e.g. `packs/episodes-arrowverse.json`), in exactly the envelope format above: self-describing (`displayName` required), episodes in watch order.
+2. **An entry in `packs/index.json`** — the file the app fetches:
+
+   ```json
+   {
+     "id": "arrowverse",
+     "displayName": "Arrowverse",
+     "showsLine": "Arrow · The Flash · Supergirl · Legends of Tomorrow — plus Constantine and Superman & Lois",
+     "episodeCount": 765,
+     "file": "episodes-arrowverse.json",
+     "sha256": "<sha256 of the dataset file, hex>",
+     "dataVersion": 1
+   }
+   ```
+
+   - `id` must match the dataset envelope's `universe` exactly, or the app refuses the download.
+   - `sha256` is the SHA-256 of the dataset file's exact bytes (`sha256sum packs/episodes-arrowverse.json` on Linux/macOS; `Get-FileHash` on Windows). The app verifies it before parsing anything: a mismatch discards the download, so an entry whose hash is wrong publishes a pack nobody can install.
+   - `dataVersion` starts at 1. **Bump it whenever the dataset changes** — the app compares it against what each device has installed and offers the newer file as an update; progress is never touched by a pack update.
+3. **The validation the app will apply** (a pack that fails it installs for nobody): at least 100 entries; unique keys and orders; per-field sanity (see the episode table); event groups only for stories told across 2+ episodes; link IDs formally valid for their platform; and the runtime rule — `film`/`episode` entries need a true runtime of 5–600 minutes, while `web`/`one-shot`/`special` entries may omit it and may run as short as 1 minute.
+4. **The golden rule applies unchanged: no sources document, no index entry.** A pack without a complete `<universe>-SOURCES.md` beside it in `docs/` does not get an entry — the same rule the Chicago and CSI packs are held to.
+
+Removing a pack later is just deleting its index entry and file; devices that installed it keep their copy and their progress (removal inside the app is per-device, in Settings, and never deletes progress either).

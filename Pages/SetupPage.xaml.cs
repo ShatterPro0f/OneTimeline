@@ -5,13 +5,19 @@ namespace OneChicago.Pages;
 
 /// <summary>
 /// First-run setup (production Decision 7) — also re-runnable from
-/// Settings via "Run setup again". Five optional steps on one clean
+/// Settings via "Run setup again". Optional steps on one clean
 /// page:
 ///
-///  1. Universes (Decision 1C). Which packs to include — the rows
-///     are UniverseSection's, shared with Settings. This comes
-///     first because the starting point below is per-universe: it
-///     speaks for whichever universe is active.
+///  0. Choose your universes (v2.1.0, Decision 1J). The app ships
+///     with NO universes; this is the PackSection picker — pick
+///     packs from the downloadable index and download them, or
+///     skip entirely and add them later in Settings. Everything
+///     below is scoped to whatever actually got installed.
+///  1. Universes (Decision 1C). Which of the installed packs to
+///     include — the rows are UniverseSection's, shared with
+///     Settings. This comes before the starting point because
+///     that step is per-universe: it speaks for whichever
+///     universe is active.
 ///  2. Starting point. Nobody is silently seeded: a fresh install
 ///     starts unwatched, and this step asks whether the user has
 ///     already watched some of the shows and lets them pick the
@@ -48,20 +54,29 @@ public partial class SetupPage : ContentPage
 		IpEntry.Text = AppHost.Store.TvIp;
 		RefreshStartingStatus();
 		BuildStartingResults();
-		// The universe rows (shared with Settings — UniverseSection).
-		// A toggle can change which universe is active, and the
-		// starting-point step below speaks for the active universe:
-		// refresh its status and clear any search results (they were
-		// the old universe's episodes) whenever the selection moves.
-		await UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, () =>
+		// Whenever the universe selection moves — a toggle below,
+		// or a pack downloaded/removed above — the starting-point
+		// step speaks for the active universe: refresh its status,
+		// clear any search results (they were the old universe's
+		// episodes), and rebuild the Content types blocks.
+		void OnUniverseSelectionChanged()
 		{
 			StartingSearchEntry.Text = "";
 			BuildStartingResults();
 			RefreshStartingStatus();
-			// A universe toggled in or out can gain or lose a
-			// Content types block.
 			_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
+		}
+		// Step one (v2.1.0): the pack picker (PackSection —
+		// shared with Settings' pack manager). Setup starts
+		// EMPTY; downloading here is what puts universes into
+		// the rows below.
+		_ = PackSection.BuildAsync(PackList, PackNoteLabel, PackSectionMode.Picker, () =>
+		{
+			_ = UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, OnUniverseSelectionChanged);
+			OnUniverseSelectionChanged();
 		});
+		// The universe rows (shared with Settings — UniverseSection).
+		await UniverseSection.BuildAsync(UniverseList, UniverseNoteLabel, OnUniverseSelectionChanged);
 		_ = CategorySection.BuildAsync(CategoryList, CategoryHeaderLabel, CategoryExplainerLabel);
 		// The My Services rows (shared with Settings —
 		// MyServicesSection), bound to the same Store state.
@@ -75,11 +90,13 @@ public partial class SetupPage : ContentPage
 		var store = AppHost.Store;
 		if (!store.Loaded) return;
 		var next = store.UpNext;
-		StartingStatusLabel.Text = next == null
-			? "Everything is currently marked watched."
-			: store.WatchedCount == 0
-				? "Right now you're at the very beginning — nothing is marked watched."
-				: $"Right now, {next.Headline} is up next ({store.WatchedCount} episodes marked watched).";
+		StartingStatusLabel.Text = store.ActiveUniverseId.Length == 0
+			? "No universes yet — download some in the step above, or add them later in Settings, under “Get more universes”."
+			: next == null
+				? "Everything is currently marked watched."
+				: store.WatchedCount == 0
+					? "Right now you're at the very beginning — nothing is marked watched."
+					: $"Right now, {next.Headline} is up next ({store.WatchedCount} episodes marked watched).";
 	}
 
 	private void BuildStartingResults()
@@ -257,6 +274,18 @@ public partial class SetupPage : ContentPage
 	}
 
 	// ---- Finish ---------------------------------------------------------
+
+	/// <summary>"Skip for now" on the pack picker: downloading
+	/// is step one, never a gate — the rest of setup works with
+	/// no universes at all, and packs can be added any time in
+	/// Settings. The button just records that the user saw the
+	/// choice and points at where it lives later.</summary>
+	private void OnSkipPacks(object sender, EventArgs e)
+	{
+		PackNoteLabel.Text = "No universes downloaded — that's fine. You can add them any time in Settings, under “Get more universes”.";
+		PackNoteLabel.IsVisible = true;
+		SkipPacksButton.IsVisible = false;
+	}
 
 	private async void OnDone(object sender, EventArgs e)
 	{

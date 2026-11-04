@@ -28,6 +28,6 @@ or build with `-p:AndroidPackageFormat=apk`.
 ## Notes
 
 - The app icon is `Resources/AppIcon/appicon.png` (a full-bleed square; Android generates the adaptive and legacy densities from it).
-- The built-in episode dataset is `Resources/Raw/episodes.json`, wrapped by the app in a universe envelope at the persistence boundary (`Services/DatasetFile.cs`). The dataset's shape is versioned per universe (`"universe": "one-chicago"`).
-- Episode descriptions refresh from TVmaze at runtime; the shipped watch order is **not** extended by refreshes — new episodes arrive through app updates, so the order stays exactly the curated one.
+- There is **no built-in episode dataset**: since v2.1.0 every universe — One Chicago and CSI included — is a downloadable pack in `packs/` (the pack index is `packs/index.json`), installed at runtime and registered from its self-describing envelope (`Services/DatasetFile.cs`, `Services/PackService.cs`). The csproj refuses to embed dataset files (`MauiAsset Remove` on `Resources\Raw\episodes*.json`) so a pack can never sneak back into the APK.
+- Episode descriptions refresh from TVmaze at runtime; the shipped watch order is **not** extended by refreshes — new episodes arrive as a new data version of the pack (the pack manager offers it as an update), so the order stays exactly the curated one.
 - Signing: development builds use the standard Android debug key. Release builds should use one consistent key kept by the maintainer — Android will only install an update over an existing install if the signing key matches.

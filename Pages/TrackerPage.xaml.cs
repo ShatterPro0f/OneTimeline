@@ -193,7 +193,16 @@ public partial class TrackerPage : ContentPage
 		// bar. Sam rejected a stats page as bloat — nothing else.
 		int watched = store.WatchedCount, total = store.Episodes.Count;
 		int pct = total > 0 ? (int)Math.Round(100.0 * watched / total) : 0;
-		ProgressLabel.Text = $"{watched} of {total} episodes · {pct}%";
+		// No active universe (v2.1.0): a fresh install before its
+		// first download, or an upgrade whose packs are still
+		// pending — the count line becomes the directions instead
+		// of a meaningless "0 of 0".
+		ProgressLabel.Text =
+			store.ActiveUniverseId.Length == 0
+				? (store.PendingRestoreIds.Count > 0
+					? "Your universes need a quick download to come back — Settings → Get more universes."
+					: "No universes yet — add some in Settings → Get more universes.")
+				: $"{watched} of {total} episodes · {pct}%";
 		OverallProgress.Progress = total > 0 ? (double)watched / total : 0;
 		RefreshUniverseSwitcher();
 		RefreshHero();

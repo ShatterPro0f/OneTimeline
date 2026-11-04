@@ -4,7 +4,7 @@
 
 One Timeline is a free Android app for watching interwoven TV series the way they were meant to be watched: in **one chronological watch order** that runs across every show in a shared universe — so you always know the single correct next episode, and the app can start it playing on your TV for you.
 
-Two universes are included. **One Chicago** — *Chicago Fire*, *Chicago P.D.*, *Chicago Med*, with *Chicago Justice*, *FBI*, and *Law & Order: SVU* crossover appearances — 846 episodes in one order. And **CSI** — *CSI: Crime Scene Investigation*, *CSI: Miami*, *CSI: NY*, *CSI: Cyber*, and *CSI: Vegas*, plus the *Without a Trace* episode that completes a crossover — 839 episodes in one order. More universes (the Arrowverse is planned) will arrive as additional packs — during setup you choose which universes to include, and you can change that any time in Settings. You can also [create your own universe](docs/CREATING-A-UNIVERSE.md).
+The app itself ships with **no universes built in** — universes are downloadable packs, added without an app update. Two are available now. **One Chicago** — *Chicago Fire*, *Chicago P.D.*, *Chicago Med*, with *Chicago Justice*, *FBI*, and *Law & Order: SVU* crossover appearances — 846 episodes in one order. And **CSI** — *CSI: Crime Scene Investigation*, *CSI: Miami*, *CSI: NY*, *CSI: Cyber*, and *CSI: Vegas*, plus the *Without a Trace* episode that completes a crossover — 839 episodes in one order. Setup's first step asks which packs to download (skippable — packs can be added any time in Settings, under **Get more universes**), and more universes will arrive as new packs in the same list. You can also [create your own universe](docs/CREATING-A-UNIVERSE.md).
 
 ## What it does
 

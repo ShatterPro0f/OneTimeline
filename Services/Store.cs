@@ -139,35 +139,84 @@ public class Store
 	/// never touched simply has empty everything.</summary>
 	private readonly Dictionary<string, UniverseData> _universes = new();
 
-	/// <summary>The catalogue ids the user has chosen to include
-	/// (setup's Universes step; the Settings Universes section).
-	/// Resolved against the catalogue on load: unknown ids drop
-	/// out, and the set can never be empty — if nothing valid
-	/// remains, every built-in universe is included (the
-	/// fresh-install default).</summary>
-	private readonly HashSet<string> _included = new();
+	/// <summary>The universe ids the user has chosen to include
+	/// (setup's Universes step; the Settings Universes section) —
+	/// the WANTED set, persisted verbatim as the state file's
+	/// IncludedUniverses. Since v2.1.0 a wanted universe is only
+	/// LIVE while its pack is installed (registered in the
+	/// catalogue): a wanted id with no pack on the device is
+	/// PENDING — the mark of an install that upgraded from a
+	/// pre-download build — and restores automatically when its
+	/// dataset downloads (PackService.RestorePendingAsync). A
+	/// fresh install wants nothing: setup's first step is the
+	/// pack picker (Sam's ruling, 2026-11-04).</summary>
+	private readonly List<string> _wanted = new();
 
-	/// <summary>The included universe ids, in catalogue order.</summary>
+	/// <summary>The packs installed on this device, in install
+	/// order — the registry the state file persists and startup
+	/// re-registers the catalogue from.</summary>
+	private readonly List<InstalledPackRecord> _downloads = new();
+
+	/// <summary>State sections for universes whose packs are NOT
+	/// currently installed, kept verbatim across saves: a removed
+	/// or not-yet-restored universe's progress is never dropped
+	/// just because its pack is absent — when the pack installs
+	/// again, its section is adopted back untouched.</summary>
+	private readonly Dictionary<string, UniverseStateFile> _dormantSections = new();
+
+	/// <summary>The active universe the state file asked for,
+	/// remembered even while its pack is still pending: when
+	/// that pack lands, it claims the active pointer (see
+	/// InstallPackAsync).</summary>
+	private string _preferredActiveId = "";
+
+	/// <summary>The packs installed on this device.</summary>
+	public IReadOnlyList<InstalledPackRecord> InstalledPacks => _downloads;
+
+	/// <summary>One installed pack's registry record, or null.</summary>
+	public InstalledPackRecord? FindInstalledPack(string id) =>
+		_downloads.FirstOrDefault(p => p.Id == id);
+
+	/// <summary>The LIVE included universe ids, in catalogue
+	/// order: wanted AND installed. This is the set every feature
+	/// reads — the switcher, the selection UI, the tracker.</summary>
 	public IReadOnlyList<string> IncludedUniverseIds =>
-		UniverseCatalogue.All.Where(u => _included.Contains(u.Id)).Select(u => u.Id).ToList();
+		UniverseCatalogue.All.Where(u => _wanted.Contains(u.Id)).Select(u => u.Id).ToList();
 
-	/// <summary>How many universes are included right now.</summary>
-	public int IncludedUniverseCount => _included.Count;
+	/// <summary>How many universes are live-included right now.</summary>
+	public int IncludedUniverseCount => IncludedUniverseIds.Count;
+
+	/// <summary>Wanted-but-not-installed universe ids, in wanted
+	/// order: the pending restores. The pack manager shows them
+	/// as "needs download"; the background restore fetches them.</summary>
+	public IReadOnlyList<string> PendingRestoreIds =>
+		_wanted.Where(id => UniverseCatalogue.Find(id) == null).ToList();
 
 	/// <summary>The universe every feature is currently working
-	/// on. Always an included, catalogued universe.</summary>
-	public string ActiveUniverseId { get; private set; } = UniverseCatalogue.DefaultId;
+	/// on: always a live-included universe, or "" when none is —
+	/// a fresh install before its first download, or an upgrade
+	/// whose packs haven't restored yet. Every consumer already
+	/// tolerates an empty episode list; "" keeps them there.</summary>
+	public string ActiveUniverseId { get; private set; } = "";
 
-	/// <summary>The active universe's catalogue entry.</summary>
-	public UniverseInfo ActiveUniverse => UniverseCatalogue.Find(ActiveUniverseId) ?? UniverseCatalogue.Default;
+	/// <summary>The active universe's catalogue entry, or null
+	/// when no universe is active.</summary>
+	public UniverseInfo? ActiveUniverse => UniverseCatalogue.Find(ActiveUniverseId);
 
 	private UniverseData DataFor(string universeId) =>
 		_universes.TryGetValue(universeId, out var data) ? data : _universes[universeId] = new UniverseData();
 
-	private UniverseData ActiveData => DataFor(ActiveUniverseId);
+	/// <summary>Stand-in data for "no active universe": reads as
+	/// empty, absorbs writes harmlessly, and is never persisted
+	/// (it never enters _universes).</summary>
+	private static readonly UniverseData NoUniverseData = new();
+
+	private UniverseData ActiveData =>
+		ActiveUniverseId.Length == 0 ? NoUniverseData : DataFor(ActiveUniverseId);
 
 	/// <summary>One universe's user-owned data. The episode list
-	/// loads lazily (refreshed device copy or embedded seed) and
+	/// loads lazily (refreshed device copy or the installed
+	/// pack file) and
 	/// is cached; everything else is plain state, persisted per
 	/// universe in the state file (see UniverseStateFile).</summary>
 	private sealed class UniverseData
@@ -476,11 +525,20 @@ public class Store
 
 	/// <summary>A universe's refreshed dataset's home on the device
 	/// (per-universe since the multi-universe build — Decision 1C).
-	/// The APK-embedded dataset remains the seed; after the first
+	/// The installed pack file remains the base; after the first
 	/// successful refresh for a universe, this file is what its
 	/// load reads.</summary>
 	private static string DataPathFor(string universeId) =>
 		Path.Combine(FileSystem.AppDataDirectory, $"episodes.{universeId}.refreshed.json");
+
+	/// <summary>An installed pack's dataset file name in app data
+	/// — derived from the universe id, never taken from remote
+	/// data, so a hostile index can never steer a write.</summary>
+	public static string PackFileNameFor(string universeId) => $"episodes.{universeId}.pack.json";
+
+	/// <summary>Where a universe's installed pack file lives.</summary>
+	private static string PackPathFor(string universeId) =>
+		Path.Combine(FileSystem.AppDataDirectory, PackFileNameFor(universeId));
 
 	/// <summary>Where pre-multi-universe builds kept the refreshed
 	/// dataset. It is the launch universe's by definition (Chicago
@@ -516,7 +574,7 @@ public class Store
 		// ---- Universe layer (v2) ----
 		/// <summary>The included universe ids, as persisted. Null in
 		/// pre-refactor files → the fresh-install default applies
-		/// (every built-in universe included).</summary>
+		/// (fresh installs: nothing — setup asks).</summary>
 		public List<string>? IncludedUniverses { get; set; }
 		/// <summary>The active universe id; null in pre-refactor
 		/// files → the launch universe.</summary>
@@ -525,6 +583,17 @@ public class Store
 		/// very presence is the v2 marker: null (absent) means a
 		/// pre-refactor file whose flat fields migrate.</summary>
 		public Dictionary<string, UniverseStateFile>? Universes { get; set; }
+
+		/// <summary>The installed-pack registry (v2.1.0, Decision
+		/// 1J): which universe packs are on this device, at which
+		/// data version, verified against which SHA-256. Null in
+		/// every state file written before downloadable packs —
+		/// such an install has NO packs on the device in the new
+		/// sense (its universes shipped inside the old app), so
+		/// its wanted universes start out pending restore, never
+		/// lost (ResolveUniverses + PackService).</summary>
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public List<InstalledPackStateFile>? InstalledPacks { get; set; }
 
 		// ---- Legacy flat per-universe fields (read-only) ----
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -563,6 +632,21 @@ public class Store
 		public int? AutoplaySessionLimit { get; set; }
 		public bool? BackgroundModeEnabled { get; set; }
 		public bool? NotificationPromptDone { get; set; }
+	}
+
+	/// <summary>One installed pack's registry entry in the state
+	/// file (v2.1.0). Registration metadata mirrors the pack's
+	/// envelope — the envelope in the pack FILE is authoritative
+	/// at registration time; these fields are the durable record
+	/// of what was installed and verified.</summary>
+	private class InstalledPackStateFile
+	{
+		public string Id { get; set; } = "";
+		public int DataVersion { get; set; } = 1;
+		public string? Sha256 { get; set; }
+		public string? FileName { get; set; }
+		public string? DisplayName { get; set; }
+		public string? ShowsLine { get; set; }
 	}
 
 	/// <summary>One universe's section of the state file: its
@@ -656,14 +740,19 @@ public class Store
 	private static string? FormatTimestamp(DateTimeOffset? t) =>
 		t?.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
 
-	/// <summary>Read one universe's episode dataset: the device copy
-	/// left by a successful data refresh (iteration 7) when one
-	/// exists, parses, AND passes the same full validation a fresh
-	/// refresh faces (audit 1.4/1.10 — the old load check was
-	/// count-only), else the universe's APK-embedded seed. A corrupt
-	/// or anomalous device copy must never brick startup — it just
-	/// falls back to the seed. For the launch universe, the
-	/// pre-multi-universe device-copy path is tried too (it is
+	/// <summary>Read one universe's episode dataset. Since
+	/// v2.1.0 every dataset lives on the device (nothing is
+	/// embedded): first the copy left by a successful data refresh
+	/// (iteration 7) when one exists, parses, AND passes the same
+	/// full validation a fresh refresh faces (audit 1.4/1.10 —
+	/// the old load check was count-only); then the installed
+	/// pack file itself, gated on parsing as this universe's
+	/// dataset (the full validation ran at install time — the
+	/// network boundary — so a file the app installed is trusted
+	/// to the same standard the old embedded seeds were). A
+	/// corrupt or anomalous copy must never brick startup — the
+	/// universe simply loads empty. For the launch universe, the
+	/// pre-multi-universe refreshed-copy path is tried too (it is
 	/// Chicago's copy by definition).</summary>
 	private async Task<string> LoadDatasetJsonAsync(string universeId)
 	{
@@ -679,21 +768,31 @@ public class Store
 					if (probe != null && DataRefreshService.ValidateDataset(probe)) return device;
 				}
 			}
-			catch { /* try the next candidate, then the embedded seed */ }
+			catch { /* try the next candidate, then the pack file */ }
 		}
-		var info = UniverseCatalogue.Find(universeId);
-		using var stream = await FileSystem.OpenAppPackageFileAsync(info?.DatasetResourceName ?? "episodes.json");
-		using var reader = new StreamReader(stream);
-		return await reader.ReadToEndAsync();
+		var packPath = PackPathFor(universeId);
+		if (File.Exists(packPath))
+		{
+			try
+			{
+				if (new FileInfo(packPath).Length <= BoundedRead.RefreshCapBytes)
+				{
+					var pack = await File.ReadAllTextAsync(packPath);
+					if (DatasetFile.Parse(pack, universeId) != null) return pack;
+				}
+			}
+			catch { /* fall through: the universe loads empty */ }
+		}
+		return "";
 	}
 
-	/// <summary>The device-copy paths a universe's load tries, in
-	/// order: its own per-universe path, then (launch universe only)
-	/// the pre-refactor path.</summary>
+	/// <summary>The refreshed-copy paths a universe's load tries,
+	/// in order: its own per-universe path, then (launch universe
+	/// only) the pre-refactor path.</summary>
 	private IEnumerable<string> DeviceDatasetCandidates(string universeId)
 	{
 		yield return DataPathFor(universeId);
-		if (universeId == UniverseCatalogue.DefaultId) yield return LegacyDataPath;
+		if (universeId == UniverseCatalogue.LegacyUniverseId) yield return LegacyDataPath;
 	}
 
 	/// <summary>Load (once) and cache a universe's episode list,
@@ -740,52 +839,159 @@ public class Store
 	public async Task<int> UniverseEpisodeCountAsync(string universeId) =>
 		(await LoadUniverseDatasetAsync(universeId)).Count;
 
-	/// <summary>Resolve the universe layer from a parsed state file
-	/// (or a fresh install): every known universe's own data, the
-	/// included set, and the active universe.
+	/// <summary>Adopt one saved per-universe section into live
+	/// data — the single adoption path: used at load for
+	/// universes whose packs are installed, and at install time
+	/// when a pack's dormant section comes back to life (its
+	/// progress exactly where it was left).</summary>
+	private void AdoptSection(string id, UniverseStateFile saved)
+	{
+		var data = DataFor(id);
+		foreach (var k in saved.Watched) data.Watched.Add(k);
+		// Link overrides: the current per-platform shape, or a
+		// pre-1G section's PrimeIds adopted as prime overrides —
+		// either way nothing is lost.
+		AdoptLinkOverrides(data, saved.LinkOverrides, saved.PrimeIds);
+		// Hidden categories (2026-11-04): known values only; a
+		// section predating the setting has none.
+		if (saved.HiddenCategories != null)
+			foreach (var c in saved.HiddenCategories)
+				if (EpisodeCategories.IsKnown(c))
+					data.HiddenCategories.Add(c.Trim().ToLowerInvariant());
+		data.LastStartedEpisodeKey = saved.LastStartedEpisodeKey ?? "";
+		data.LastStartedPlatform = PlatformCatalog.Find(saved.LastStartedPlatform)?.Signifier ?? "";
+		data.LastStartedPositionMs = saved.LastStartedPositionMs;
+		data.LastPositionSavedAtMs = saved.LastStartedPositionMs;
+		data.DataUpdatedAt = ParseTimestamp(saved.DataUpdatedAt);
+		data.DataRefreshAttemptedAt = ParseTimestamp(saved.DataRefreshAttemptedAt);
+	}
+
+	/// <summary>Register the catalogue from the state file's
+	/// installed-pack registry (v2.1.0): every recorded pack's
+	/// file is re-validated against its envelope (universe stamp,
+	/// self-declared name, parseable episodes) and registered
+	/// from that envelope — the one registration path, identical
+	/// for every pack. A pack whose file is missing just doesn't
+	/// register (its registry entry drops; its progress section,
+	/// if any, goes dormant and its wanted id stays pending). A
+	/// CORRUPT file is quarantined like corrupt progress —
+	/// renamed, never deleted, never fatal — and the universe
+	/// doesn't register.</summary>
+	private void RegisterInstalledDownloads(List<InstalledPackStateFile>? saved)
+	{
+		_downloads.Clear();
+		if (saved == null) return;
+		foreach (var record in saved)
+		{
+			if (record == null || !PackIndexParse.IsValidPackId(record.Id)) continue;
+			if (_downloads.Any(p => p.Id == record.Id)) continue;
+			var info = TryRegisterPackFile(record.Id);
+			if (info == null) continue;
+			_downloads.Add(new InstalledPackRecord
+			{
+				Id = record.Id,
+				DataVersion = record.DataVersion >= 1 ? record.DataVersion : 1,
+				Sha256 = record.Sha256 ?? "",
+				FileName = PackFileNameFor(record.Id),
+				DisplayName = info.DisplayName,
+				ShowsLine = info.ShowsLine,
+			});
+		}
+	}
+
+	/// <summary>Validate one on-device pack file and register its
+	/// universe from its envelope. Returns the registered entry,
+	/// or null when the pack can't register: no file (null,
+	/// quietly) or a file that fails validation (quarantined).</summary>
+	private UniverseInfo? TryRegisterPackFile(string universeId)
+	{
+		var path = PackPathFor(universeId);
+		try
+		{
+			if (!File.Exists(path)) return null;
+			if (new FileInfo(path).Length > BoundedRead.RefreshCapBytes)
+			{
+				QuarantinePackFile(path);
+				return null;
+			}
+			var envelope = DatasetFile.ParseEnvelope(File.ReadAllText(path));
+			if (envelope == null || envelope.WasBareArray
+				|| !string.Equals(envelope.Universe, universeId, StringComparison.Ordinal)
+				|| string.IsNullOrWhiteSpace(envelope.DisplayName))
+			{
+				QuarantinePackFile(path);
+				return null;
+			}
+			var info = UniverseCatalogue.InfoFromEnvelope(envelope, PackFileNameFor(universeId));
+			UniverseCatalogue.Register(info);
+			return info;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	/// <summary>Quarantine a bad pack file the way corrupt
+	/// progress is quarantined (audit 1.5): rename with a
+	/// timestamp — never delete, never silently overwrite.</summary>
+	private static void QuarantinePackFile(string path)
+	{
+		try
+		{
+			var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+			File.Move(path, $"{path}.corrupt-{stamp}");
+		}
+		catch { /* quarantine is best-effort; not registering still beats bricking */ }
+	}
+
+	/// <summary>Resolve the universe layer from a parsed state
+	/// file (or a fresh install): every universe's own data, the
+	/// wanted set, and the active universe.
 	///
 	/// MIGRATION (Decision 1C): a state file with no Universes
 	/// section predates the multi-universe build. Its flat watched
 	/// list, overrides, last-started episode and refresh timestamps
 	/// ARE the launch universe's — Chicago was the only universe
-	/// those builds knew — and are adopted into Chicago's section
-	/// untouched: nothing watched, saved, or configured is lost or
-	/// reset. The included set defaults to every built-in universe
-	/// (today's behaviour, preserved exactly) and the active
-	/// universe is the launch universe.</summary>
+	/// those builds knew — and are adopted untouched: nothing
+	/// watched, saved, or configured is lost or reset.
+	///
+	/// MIGRATION (v2.1.0, Sam's upgrade guarantee): a state file
+	/// with no InstalledPacks registry predates downloadable
+	/// packs — its universes shipped inside the old app, so
+	/// nothing is registered for it here. Its wanted universes
+	/// (its persisted selection, or for a pre-refactor file the
+	/// launch universe) start PENDING: their progress sections sit
+	/// dormant in state, untouched, and the packs restore in the
+	/// background (PackService.RestorePendingAsync) or from the
+	/// pack manager. A fresh install (no state file) wants
+	/// nothing and has nothing — setup's pack picker is step one.</summary>
 	private void ResolveUniverses(StateFile? state)
 	{
 		_universes.Clear();
+		_dormantSections.Clear();
+		bool flatMigrated = false;
 		if (state?.Universes != null)
 		{
 			foreach (var (id, saved) in state.Universes)
 			{
-				if (UniverseCatalogue.Find(id) == null || saved == null) continue;
-				var data = DataFor(id);
-				foreach (var k in saved.Watched) data.Watched.Add(k);
-				// Link overrides: the current per-platform shape,
-				// or a pre-1G section's PrimeIds adopted as prime
-				// overrides — either way nothing is lost.
-				AdoptLinkOverrides(data, saved.LinkOverrides, saved.PrimeIds);
-				// Hidden categories (2026-11-04): known values
-				// only; a section predating the setting has none.
-				if (saved.HiddenCategories != null)
-					foreach (var c in saved.HiddenCategories)
-						if (EpisodeCategories.IsKnown(c))
-							data.HiddenCategories.Add(c.Trim().ToLowerInvariant());
-				data.LastStartedEpisodeKey = saved.LastStartedEpisodeKey ?? "";
-				data.LastStartedPlatform = PlatformCatalog.Find(saved.LastStartedPlatform)?.Signifier ?? "";
-				data.LastStartedPositionMs = saved.LastStartedPositionMs;
-				data.LastPositionSavedAtMs = saved.LastStartedPositionMs;
-				data.DataUpdatedAt = ParseTimestamp(saved.DataUpdatedAt);
-				data.DataRefreshAttemptedAt = ParseTimestamp(saved.DataRefreshAttemptedAt);
+				if (saved == null) continue;
+				// A section for a universe whose pack is installed
+				// goes live; any other is kept dormant, verbatim —
+				// progress survives a pack's absence and is adopted
+				// back if the pack ever (re)installs.
+				if (UniverseCatalogue.Find(id) != null) AdoptSection(id, saved);
+				else _dormantSections[id] = saved;
 			}
 		}
 		else if (state != null)
 		{
 			// Pre-refactor file → its flat per-universe fields are
-			// the launch universe's data.
-			var data = DataFor(UniverseCatalogue.DefaultId);
+			// the launch universe's data. Adopted into live data
+			// directly: the section must persist across saves
+			// while Chicago's pack is still pending its restore.
+			flatMigrated = true;
+			var data = DataFor(UniverseCatalogue.LegacyUniverseId);
 			foreach (var k in state.Watched ?? new List<string>()) data.Watched.Add(k);
 			AdoptLinkOverrides(data, null, state.PrimeIds);
 			data.LastStartedEpisodeKey = state.LastStartedEpisodeKey ?? "";
@@ -795,16 +1001,27 @@ public class Store
 			data.DataRefreshAttemptedAt = ParseTimestamp(state.DataRefreshAttemptedAt);
 		}
 
-		_included.Clear();
+		_wanted.Clear();
 		if (state?.IncludedUniverses != null)
+		{
 			foreach (var id in state.IncludedUniverses)
-				if (UniverseCatalogue.Find(id) != null) _included.Add(id);
-		if (_included.Count == 0)
-			foreach (var u in UniverseCatalogue.All) _included.Add(u.Id);
+				if (!string.IsNullOrWhiteSpace(id) && !_wanted.Contains(id)) _wanted.Add(id);
+		}
+		else if (state?.Universes != null)
+		{
+			// A v2 file that never persisted a selection of its
+			// own: the universes it holds progress for are the
+			// wanted ones.
+			foreach (var id in state.Universes.Keys) _wanted.Add(id);
+		}
+		if (flatMigrated && !_wanted.Contains(UniverseCatalogue.LegacyUniverseId))
+			_wanted.Add(UniverseCatalogue.LegacyUniverseId);
 
-		ActiveUniverseId = state?.ActiveUniverseId is { } savedActive && _included.Contains(savedActive)
-			? savedActive
-			: IncludedUniverseIds[0];
+		_preferredActiveId = state?.ActiveUniverseId ?? "";
+		var live = IncludedUniverseIds;
+		ActiveUniverseId = _preferredActiveId.Length > 0 && live.Contains(_preferredActiveId)
+			? _preferredActiveId
+			: live.Count > 0 ? live[0] : "";
 	}
 
 	public async Task LoadAsync()
@@ -845,20 +1062,22 @@ public class Store
 			// written now — it persists the explicit false, so a
 			// process death mid-setup re-offers setup next launch
 			// instead of mistaking this for a pre-setup install.
-			// Universes: every built-in included, the launch universe
-			// active (ResolveUniverses' defaults).
+			// Universes: nothing wanted, nothing active
+			// (ResolveUniverses' fresh-install defaults).
 			SetupCompleted = false;
 			ResolveUniverses(state: null);
-			await LoadUniverseDatasetAsync(ActiveUniverseId);
 			SaveSettings();
 		}
 		else
 		{
-			// The universe layer first: it adopts the file's
+			// The pack registry first (v2.1.0): which packs are
+			// installed decides which universes exist at all.
+			// Then the universe layer: it adopts the file's
 			// per-universe sections — or, for a pre-refactor file,
 			// migrates its flat fields into the launch universe
 			// (see ResolveUniverses). The active universe's dataset
 			// then materializes against that data below.
+			RegisterInstalledDownloads(state.InstalledPacks);
 			ResolveUniverses(state);
 			// Discovered channel ids (Decision 1G): adopted only
 			// for known platforms with plausible values; a file
@@ -904,7 +1123,8 @@ public class Store
 			// setup yet) re-offers the flow.
 			SetupCompleted = state.SetupCompleted ?? true;
 			ApplyOptionalSettings(state);
-			await LoadUniverseDatasetAsync(ActiveUniverseId);
+			if (ActiveUniverseId.Length > 0)
+				await LoadUniverseDatasetAsync(ActiveUniverseId);
 		}
 
 		Loaded = true;
@@ -951,12 +1171,32 @@ public class Store
 				DataRefreshAttemptedAt = FormatTimestamp(data.DataRefreshAttemptedAt),
 			};
 		}
+		// Dormant sections (universes whose packs aren't
+		// installed) round-trip verbatim: saving must never drop
+		// a universe's progress just because its pack is absent.
+		foreach (var (id, section) in _dormantSections)
+			if (!universes.ContainsKey(id)) universes[id] = section;
 		var state = new StateFile
 		{
 			SetupCompleted = SetupCompleted,
-			IncludedUniverses = IncludedUniverseIds.ToList(),
+			// The WANTED set, verbatim — pending universes stay
+			// in the file until they restore or are forgotten,
+			// so an offline upgrade never loses its place in
+			// line (v2.1.0).
+			IncludedUniverses = _wanted.ToList(),
 			ActiveUniverseId = ActiveUniverseId,
 			Universes = universes,
+			InstalledPacks = _downloads.Count > 0
+				? _downloads.Select(p => new InstalledPackStateFile
+				{
+					Id = p.Id,
+					DataVersion = p.DataVersion,
+					Sha256 = p.Sha256,
+					FileName = p.FileName,
+					DisplayName = p.DisplayName,
+					ShowsLine = p.ShowsLine,
+				}).ToList()
+				: null,
 			PlatformChannels = _platformChannels.Count > 0
 				? new Dictionary<string, string>(_platformChannels)
 				: null,
@@ -1039,7 +1279,7 @@ public class Store
 		File.WriteAllText(DataPathFor(ActiveUniverseId), pristineJson);
 		// Retire the pre-multi-universe device copy for the launch
 		// universe — the per-universe path supersedes it from here.
-		if (ActiveUniverseId == UniverseCatalogue.DefaultId && File.Exists(LegacyDataPath))
+		if (ActiveUniverseId == UniverseCatalogue.LegacyUniverseId && File.Exists(LegacyDataPath))
 			File.Delete(LegacyDataPath);
 		SaveSettings();
 	}
@@ -1331,19 +1571,46 @@ public class Store
 	/// unknown universe, or when the exclusion would leave nothing
 	/// included: the app always has at least one universe, and the
 	/// UI explains that when it happens.</summary>
+	/// <summary>Include or exclude a universe — one state, two
+	/// surfaces: setup's Universes step and the Settings Universes
+	/// section both call this. Including takes effect immediately
+	/// (the switcher and the rows pick it up from the persisted
+	/// set). Excluding never deletes the universe's progress: its
+	/// section stays in the state file, and re-including restores
+	/// everything exactly where it was left. Excluding the ACTIVE
+	/// universe moves the active pointer to another included
+	/// universe — or to none, when it was the last one: since
+	/// v2.1.0 an install can legitimately have zero live
+	/// universes (a fresh install starts there), so exclusion is
+	/// never refused for emptying the set. Returns false — and
+	/// changes nothing — only for a universe that isn't
+	/// installed.</summary>
 	public async Task<bool> SetUniverseIncludedAsync(string universeId, bool included)
 	{
 		if (UniverseCatalogue.Find(universeId) == null) return false;
 		if (included)
 		{
-			if (_included.Add(universeId)) SaveSettings();
+			if (!_wanted.Contains(universeId))
+			{
+				_wanted.Add(universeId);
+				SaveSettings();
+			}
 			return true;
 		}
-		if (!_included.Contains(universeId)) return true;
-		if (_included.Count <= 1) return false;
-		_included.Remove(universeId);
+		if (!_wanted.Contains(universeId)) return true;
+		_wanted.Remove(universeId);
 		if (ActiveUniverseId == universeId)
-			await SetActiveUniverseAsync(IncludedUniverseIds[0]);
+		{
+			var live = IncludedUniverseIds;
+			if (live.Count > 0)
+				await SetActiveUniverseAsync(live[0]);
+			else
+			{
+				ActiveUniverseId = "";
+				SaveSettings();
+				Changed?.Invoke();
+			}
+		}
 		else
 		{
 			SaveSettings();
@@ -1360,7 +1627,7 @@ public class Store
 	/// universe that isn't included.</summary>
 	public async Task<bool> SetActiveUniverseAsync(string universeId)
 	{
-		if (!_included.Contains(universeId)) return false;
+		if (!IncludedUniverseIds.Contains(universeId)) return false;
 		if (universeId == ActiveUniverseId)
 		{
 			await LoadUniverseDatasetAsync(universeId);
@@ -1368,6 +1635,144 @@ public class Store
 		}
 		ActiveUniverseId = universeId;
 		await LoadUniverseDatasetAsync(universeId);
+		SaveSettings();
+		Changed?.Invoke();
+		return true;
+	}
+
+	// ---- Downloaded packs (Decision 1J, v2.1.0) -----------------
+
+	/// <summary>Install a pack whose bytes have ALREADY passed
+	/// the SHA-256 gate (PackService.InstallFromBytesAsync — the
+	/// network boundary verified them against the index). Here
+	/// the content faces the full gauntlet every dataset faces:
+	/// a self-describing envelope (bare arrays and envelopes
+	/// without a display name are refused — a pack must describe
+	/// itself), a universe stamp matching the listing it came
+	/// under, and DataRefreshService.ValidateDataset over every
+	/// episode. Any failure installs NOTHING — the previous
+	/// install of the same pack, if there is one, stays exactly
+	/// as it was, because the file is only written after every
+	/// check has passed.
+	///
+	/// A successful install: writes the pack file, registers the
+	/// universe from its envelope, records the registry entry,
+	/// adopts any dormant progress section untouched (a removed
+	/// pack's progress, or an upgrade's pending universe, comes
+	/// back exactly where it was left), joins the wanted set, and
+	/// claims the active pointer when there is none — or when
+	/// this pack is the one the state file remembers preferring.
+	/// On an UPDATE the refreshed device copy is dropped: it was
+	/// merged against the old pack data and must not shadow the
+	/// new (the refresh rebuilds it from the new pack).</summary>
+	public async Task<PackInstallResult> InstallPackAsync(PackIndexEntry entry, byte[] bytes)
+	{
+		if (entry == null || !PackIndexParse.IsValidPackId(entry.Id))
+			return PackInstallResult.Fail("That universe's listing is damaged — nothing was installed.");
+		string json;
+		try { json = System.Text.Encoding.UTF8.GetString(bytes); }
+		catch { return PackInstallResult.Fail("That universe file couldn't be read — nothing was installed."); }
+		var envelope = DatasetFile.ParseEnvelope(json);
+		if (envelope == null || envelope.WasBareArray)
+			return PackInstallResult.Fail("That universe file isn't a valid pack — nothing was installed.");
+		if (!string.Equals(envelope.Universe, entry.Id, StringComparison.Ordinal))
+			return PackInstallResult.Fail("That file belongs to a different universe than its listing says — nothing was installed.");
+		if (string.IsNullOrWhiteSpace(envelope.DisplayName))
+			return PackInstallResult.Fail("That pack doesn't describe itself, so it can't be added — nothing was installed.");
+		if (!DataRefreshService.ValidateDataset(envelope.Episodes))
+			return PackInstallResult.Fail("That pack's episode data didn't pass the app's checks — nothing was installed.");
+
+		var id = entry.Id;
+		bool wasUpdate = _downloads.Any(p => p.Id == id);
+		Directory.CreateDirectory(FileSystem.AppDataDirectory);
+		await File.WriteAllBytesAsync(PackPathFor(id), bytes);
+		var info = UniverseCatalogue.InfoFromEnvelope(envelope, PackFileNameFor(id), entry.ShowsLine);
+		UniverseCatalogue.Register(info);
+		_downloads.RemoveAll(p => p.Id == id);
+		_downloads.Add(new InstalledPackRecord
+		{
+			Id = id,
+			DataVersion = entry.DataVersion >= 1 ? entry.DataVersion : 1,
+			Sha256 = entry.Sha256?.Trim().ToLowerInvariant() ?? "",
+			FileName = PackFileNameFor(id),
+			DisplayName = info.DisplayName,
+			ShowsLine = info.ShowsLine,
+		});
+		if (_dormantSections.Remove(id, out var dormant))
+			AdoptSection(id, dormant);
+		var data = DataFor(id);
+		data.Episodes = null; // re-read from the new pack file on next access
+		if (wasUpdate)
+		{
+			var refreshed = DataPathFor(id);
+			if (File.Exists(refreshed)) File.Delete(refreshed);
+		}
+		if (!_wanted.Contains(id)) _wanted.Add(id);
+		if (ActiveUniverseId.Length == 0 || _preferredActiveId == id)
+			ActiveUniverseId = id;
+		// The active universe's dataset materializes now (its
+		// cache was invalidated above — an update of the pack on
+		// screen must show its new data, not the old or nothing);
+		// any other pack loads on activation, as always.
+		if (ActiveUniverseId == id)
+			await LoadUniverseDatasetAsync(id);
+		SaveSettings();
+		return PackInstallResult.Success(wasUpdate);
+	}
+
+	/// <summary>Remove an installed pack: its dataset files are
+	/// deleted and its universe unregisters. Its PROGRESS IS
+	/// KEPT — the non-destructive precedent: the universe's data
+	/// stays in the state file (live for this session, dormant
+	/// after a restart), and re-downloading the pack brings
+	/// everything back exactly where it was left. Removing the
+	/// active universe moves the pointer to another included
+	/// universe, or to none.</summary>
+	public async Task<PackInstallResult> RemovePackAsync(string universeId)
+	{
+		if (FindInstalledPack(universeId) == null || UniverseCatalogue.Find(universeId) == null)
+			return PackInstallResult.Fail("That universe isn't installed.");
+		try { var p = PackPathFor(universeId); if (File.Exists(p)) File.Delete(p); } catch { /* the unregister below still stands */ }
+		try { var r = DataPathFor(universeId); if (File.Exists(r)) File.Delete(r); } catch { /* a derivative copy; best effort */ }
+		if (universeId == UniverseCatalogue.LegacyUniverseId)
+		{
+			try { if (File.Exists(LegacyDataPath)) File.Delete(LegacyDataPath); } catch { /* pre-refactor copy; best effort */ }
+		}
+		UniverseCatalogue.Unregister(universeId);
+		_downloads.RemoveAll(p => p.Id == universeId);
+		_wanted.Remove(universeId);
+		if (ActiveUniverseId == universeId)
+		{
+			var live = IncludedUniverseIds;
+			if (live.Count > 0)
+				await SetActiveUniverseAsync(live[0]);
+			else
+			{
+				ActiveUniverseId = "";
+				SaveSettings();
+				Changed?.Invoke();
+			}
+		}
+		else
+		{
+			SaveSettings();
+			Changed?.Invoke();
+		}
+		return PackInstallResult.Done("Removed. Your progress in it is kept — download it again and everything is where you left it.");
+	}
+
+	/// <summary>Forget a pending universe (one an upgraded
+	/// install previously had included, whose pack never
+	/// restored — typically because it is no longer offered):
+	/// it leaves the wanted set, so it stops pending. Its
+	/// progress section, if any, stays in state untouched —
+	/// forgetting stops the restore, it doesn't erase history;
+	/// downloading the pack again later still adopts it back.</summary>
+	public bool ForgetPendingUniverse(string universeId)
+	{
+		if (UniverseCatalogue.Find(universeId) != null) return false;
+		if (!_wanted.Remove(universeId)) return false;
+		if (_preferredActiveId == universeId) _preferredActiveId = "";
 		SaveSettings();
 		Changed?.Invoke();
 		return true;
@@ -1635,7 +2040,7 @@ public class Store
 		var backupUniverse = root.TryGetProperty("universe", out var universeEl)
 			&& universeEl.ValueKind == JsonValueKind.String
 			? universeEl.GetString()
-			: UniverseCatalogue.DefaultId;
+			: UniverseCatalogue.LegacyUniverseId;
 		if (backupUniverse != ActiveUniverseId) return ImportResult.WrongUniverse;
 
 		var validKeys = Episodes.Select(e => e.Key).ToHashSet();
@@ -1702,7 +2107,7 @@ public class Store
 			return ImportResult.NotABackup;
 		}
 		if (state == null || state.Watched == null) return ImportResult.NotABackup;
-		if (ActiveUniverseId != UniverseCatalogue.DefaultId) return ImportResult.WrongUniverse;
+		if (ActiveUniverseId != UniverseCatalogue.LegacyUniverseId) return ImportResult.WrongUniverse;
 
 		var validKeys = Episodes.Select(e => e.Key).ToHashSet();
 		_watched.Clear();
@@ -1750,32 +2155,46 @@ public class Store
 	/// (Decision 7: no seed, for anyone, ever), every setting back at
 	/// its default, and setup offered again on the next appearance,
 	/// exactly as a fresh install behaves.</summary>
+	/// <summary>"Start over": wipe the state file and reproduce a
+	/// first install exactly — NOTHING watched (Decision 7: no
+	/// seed, for anyone, ever), every setting back at its default,
+	/// and setup offered again on the next appearance. Since
+	/// v2.1.0 a first install also has NO universes: every
+	/// installed pack file and refreshed copy is deleted, the
+	/// catalogue empties, and the pack picker in setup is where
+	/// universes come from again.</summary>
 	public async Task ClearAllAsync()
 	{
 		if (File.Exists(StatePath)) File.Delete(StatePath);
-		// A first install has no refreshed device datasets either —
-		// back to the APK-embedded seeds: every universe's copy
-		// goes, including the pre-multi-universe universe-less one.
 		if (File.Exists(LegacyDataPath)) File.Delete(LegacyDataPath);
-		foreach (var u in UniverseCatalogue.All)
+		// Every pack's files go: the registered ones (catalogue)
+		// and any the registry still names.
+		var packIds = UniverseCatalogue.All.Select(u => u.Id)
+			.Concat(_downloads.Select(d => d.Id)).Distinct().ToList();
+		foreach (var id in packIds)
 		{
-			var path = DataPathFor(u.Id);
-			if (File.Exists(path)) File.Delete(path);
+			var refreshed = DataPathFor(id);
+			if (File.Exists(refreshed)) File.Delete(refreshed);
+			var pack = PackPathFor(id);
+			if (File.Exists(pack)) File.Delete(pack);
 		}
+		foreach (var id in packIds) UniverseCatalogue.Unregister(id);
+		_downloads.Clear();
+		PackService.ClearIndexCache();
 
-		// Every universe's progress goes with the state file: fresh
-		// UniverseData all round, every built-in universe included,
-		// the launch universe active — the fresh-install universe
-		// state (Decision 1C).
+		// Every universe's progress goes with the state file:
+		// fresh UniverseData all round, nothing wanted, nothing
+		// dormant, nothing active — the fresh-install state.
 		_universes.Clear();
+		_dormantSections.Clear();
+		_wanted.Clear();
+		_preferredActiveId = "";
+		ActiveUniverseId = "";
 		_platformChannels.Clear();
 		// My Services returns to its fresh-install state too:
 		// all three selected.
 		_myServices.Clear();
 		foreach (var p in PlatformCatalog.All) _myServices.Add(p.Signifier);
-		_included.Clear();
-		foreach (var u in UniverseCatalogue.All) _included.Add(u.Id);
-		ActiveUniverseId = UniverseCatalogue.DefaultId;
 
 		TvIp = DefaultTvIp;
 		PollSeconds = DefaultPollSeconds;
@@ -1792,10 +2211,6 @@ public class Store
 		// exactly that state (Decision 7).
 		SetupCompleted = false;
 
-		// Reload the (now active) launch universe from its seed;
-		// the loader materializes its empty watched set and shipped
-		// IDs onto the rows.
-		await LoadUniverseDatasetAsync(ActiveUniverseId);
 		SaveSettings();
 	}
 
