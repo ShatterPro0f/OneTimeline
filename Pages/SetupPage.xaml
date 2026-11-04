@@ -59,7 +59,7 @@
             <!-- PRIME VIDEO LINKS -->
             <Label Text="PRIME VIDEO LINKS (OPTIONAL)" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
             <Label FontSize="14" TextColor="{DynamicResource ThText2}" LineBreakMode="WordWrap"
-                   Text="The One Chicago episodes come with their Prime Video links included, so Play works out of the box. You can still replace any single episode's link with your own: open the episode in the Prime Video app (or at primevideo.com), tap Share, then Copy link. Then open that episode in this app and paste the link under “Your Prime Video link”. Only the episode ID from your link is kept, and it never leaves this phone." />
+                   Text="Episodes come with their Prime Video links included wherever their universe's pack has them, so Play works out of the box for linked episodes. One exception: the CSI pack's links play inside Prime Video with the Paramount+ channel add-on, so those episodes need that add-on on your Prime account. You can still replace any single episode's link with your own: open the episode in the Prime Video app (or at primevideo.com), tap Share, then Copy link. Then open that episode in this app and paste the link under “Your Prime Video link”. Only the episode ID from your link is kept, and it never leaves this phone." />
 
             <!-- FINISH -->
             <Button x:Name="DoneButton" Text="Done" Clicked="OnDone"

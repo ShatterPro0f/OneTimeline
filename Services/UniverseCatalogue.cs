@@ -42,8 +42,8 @@ public sealed class UniverseInfo
 
 /// <summary>
 /// The catalogue of universes this build of the app knows
-/// (Decision 1C). One Chicago is the first entry — today the only
-/// one. Adding a universe to the app means adding an entry here
+/// (Decision 1C). One Chicago is the first entry; CSI is the
+/// second (Decision 1E). Adding a universe to the app means adding an entry here
 /// plus its dataset file; the selection UI (setup + Settings),
 /// per-universe progress, the active-universe plumbing, backup
 /// scoping and diagnostics all pick it up from this list.
@@ -77,7 +77,34 @@ public static class UniverseCatalogue
 		},
 	};
 
-	internal static readonly List<UniverseInfo> Registry = new() { OneChicago };
+	/// <summary>The second universe: the CSI shows in the
+	/// community spreadsheet "CSI Universe Release Order"'s
+	/// release order, plus the single Without a Trace episode
+	/// that completes the "Who &amp; What" crossover (Decision
+	/// 1E). Its shipped episode links are Paramount+ Amazon
+	/// Channel content IDs — they open inside Prime Video with
+	/// the Paramount+ channel add-on; CSI: Cyber and a few other
+	/// episodes have no Canadian streaming link and are
+	/// tracker-only. Full provenance: docs/CSI-SOURCES.md in the
+	/// project repository.</summary>
+	public static readonly UniverseInfo Csi = new()
+	{
+		Id = "csi",
+		DisplayName = "CSI",
+		ShowsLine = "CSI: Crime Scene Investigation · CSI: Miami · CSI: NY · CSI: Cyber · CSI: Vegas — plus a Without a Trace crossover",
+		DatasetResourceName = "episodes-csi.json",
+		TvMazeShowIds = new Dictionary<string, int>
+		{
+			["CSI"] = 109,
+			["Miami"] = 576,
+			["NY"] = 749,
+			["Cyber"] = 735,
+			["Vegas"] = 50361,
+			["WAT"] = 813,
+		},
+	};
+
+	internal static readonly List<UniverseInfo> Registry = new() { OneChicago, Csi };
 
 	/// <summary>Every known universe, in display order.</summary>
 	public static IReadOnlyList<UniverseInfo> All => Registry;

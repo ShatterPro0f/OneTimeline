@@ -155,9 +155,11 @@
             <Label Text="ABOUT" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
             <Label x:Name="AboutLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
-                   Text="Episode descriptions are provided by TVmaze and used under the CC BY-SA licence. This app is an independent watch-order tracker. It is not affiliated with, endorsed by, or sponsored by NBC, NBCUniversal, Wolf Entertainment, Roku, or Amazon — show titles are used only to identify the episodes." />
+                   Text="Episode descriptions are provided by TVmaze and used under the CC BY-SA licence. This app is an independent watch-order tracker. It is not affiliated with, endorsed by, or sponsored by the networks and studios behind these shows, or by Roku or Amazon — show titles are used only to identify the episodes." />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
                    Text="Watch order is based on the community spreadsheet &quot;Chicago Franchise Episode Timeline (with Cameos)&quot;, created and maintained by its author and the contributors who keep it current — thank you. https://docs.google.com/spreadsheets/d/1d6nnW_I3qrWUujOXi1Db2717wUKX86J4wRZdGOYPDog" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,4,0,0"
+                   Text="The CSI watch order is based on the community spreadsheet &quot;CSI Universe Release Order&quot; (its author isn't named in the sheet — thank you, whoever keeps it). The CSI pack's episode links open inside Prime Video with the Paramount+ channel add-on. https://docs.google.com/spreadsheets/d/1I-LQamAPqCOM9PvG4IfCadLpwRGKr9hZ56BNWkBE0_I" />
             <Button x:Name="DiagnosticsButton" Text="Share diagnostics" Clicked="OnShareDiagnostics"
                     BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,8,0,0" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"

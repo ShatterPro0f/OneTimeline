@@ -56,6 +56,12 @@ public class Episode
 		"PD" => "Chicago P.D.",
 		"Med" => "Chicago Med",
 		"Justice" => "Chicago Justice",
+		"CSI" => "CSI: Crime Scene Investigation",
+		"Miami" => "CSI: Miami",
+		"NY" => "CSI: NY",
+		"Cyber" => "CSI: Cyber",
+		"Vegas" => "CSI: Vegas",
+		"WAT" => "Without a Trace",
 		_ => Show,
 	};
 
@@ -109,6 +115,12 @@ public class Episode
 		"Justice" => Color.FromArgb("#8E6CC8"),
 		"FBI" => Color.FromArgb("#C9A227"),
 		"Law & Order: SVU" => Color.FromArgb("#7A8699"),
+		"CSI" => Color.FromArgb("#B08D3E"),
+		"Miami" => Color.FromArgb("#E8875A"),
+		"NY" => Color.FromArgb("#5B7DA3"),
+		"Cyber" => Color.FromArgb("#4FA3A5"),
+		"Vegas" => Color.FromArgb("#C44B6E"),
+		"WAT" => Color.FromArgb("#8A94A6"),
 		_ => Color.FromArgb("#999999"),
 	};
 
