@@ -2,7 +2,7 @@
 
 This document accounts for **every kind of data** in the Arrowverse pack: where it was found, how it was obtained, its licence or terms position, and what the app does with it. It follows the standard set by [ONE-CHICAGO-SOURCES.md](ONE-CHICAGO-SOURCES.md), [CSI-SOURCES.md](CSI-SOURCES.md) and [MCU-SOURCES.md](MCU-SOURCES.md), per the rule in [CREATING-A-UNIVERSE.md](CREATING-A-UNIVERSE.md): no sources document, no place in the release.
 
-**The pack in numbers:** 765 episodes across 8 series — *Arrow* 170 · *The Flash* 184 · *Supergirl* 126 · *DC's Legends of Tomorrow* 110 · *Batwoman* 51 · *Black Lightning* 58 · *Constantine* 13 · *Superman & Lois* 53 — with 765 descriptions, 765 true runtimes, 8 crossover/multi-part event groups (28 episodes), 2 cameo-flagged episodes, and, at this stage, 169 streaming links (all *Arrow* on Prime Video Canada). The remaining 596 episodes are checklist-only in Canada for now; §5 explains why, show by show.
+**The pack in numbers:** 765 episodes across 8 series — *Arrow* 170 · *The Flash* 184 · *Supergirl* 126 · *DC's Legends of Tomorrow* 110 · *Batwoman* 51 · *Black Lightning* 58 · *Constantine* 13 · *Superman & Lois* 53 — with 765 descriptions, 765 true runtimes, 8 crossover/multi-part event groups (28 episodes), 2 cameo-flagged episodes, and 353 streaming links — *Arrow*'s 169 on Prime Video Canada plus *The Flash*'s 184 on Netflix Canada (the stage-B harvest, filled in as pack dataVersion 2 on 2026-11-04). The remaining 412 episodes are checklist-only in Canada; §5 explains why, show by show.
 
 **Form of the pack (Decision 1J):** this universe ships as a **downloadable pack**, not as data embedded in the app. The dataset file (`episodes-arrowverse.json`) is self-describing: its envelope carries `displayName`, `showsLine`, and the `tvMazeShowIds` refresh mapping alongside `universe` and `version`, so a downloaded pack registers from its envelope alone.
 
@@ -39,8 +39,14 @@ The data was assembled by two build scripts, included in this repository under `
 - **The rule (decision log §1H.6 as amended 2026-11-04):** a streaming link is written only from a listing that actually **streams** in Canada. JustWatch classifies every offer by monetization type; the pack takes a Prime Video content ID (`amzn1.dv.gti.…`) only from an offer classified **FLATRATE** (or its ad-supported tier) on a Prime package. **Purchase and rental listings are never used as a source of IDs** — their pages open a storefront, not a stream.
 - **What that yields today:** *Arrow* is the only in-scope series that streams on Prime Video in Canada — **169 of its 170 episodes** carry a `prime` link in the pack, every ID taken from the episode's flatrate listing and verified unique and formally valid.
 - **The one gap, accounted:** *Arrow* **S4E8, "Legends of Yesterday"** (part 2 of the *Heroes Join Forces* crossover), has **no flatrate listing in Canada** on JustWatch — it is purchase-only (Amazon Video and Apple TV Store) — so it ships without a link, as a checklist entry, rather than with a purchase-page ID.
-- **Deliberately excluded — *The Flash*'s Prime IDs.** JustWatch carries a Prime content ID for every *Flash* episode, but all of them hang off **purchase** listings; the series streams in Canada on **Netflix** (§5). Under the rule above, none of those IDs is in the pack. The *Flash* Netflix episode IDs are collected by a separate signed-in harvest (stage B, under the maintainer's blanket platform permission, decision log §1H.7) and will arrive as a pack data update.
+- **Deliberately excluded — *The Flash*'s Prime IDs.** JustWatch carries a Prime content ID for every *Flash* episode, but all of them hang off **purchase** listings; the series streams in Canada on **Netflix** (§5). Under the rule above, none of those IDs is in the pack. The *Flash* Netflix episode IDs were collected by a separate signed-in harvest (stage B, under the maintainer's blanket platform permission, decision log §1H.7) and arrived as a pack data update — see the stage-C note below.
 - **Licence/terms position, stated plainly:** JustWatch's published terms describe personal, non-commercial use. This project is free and non-commercial; the IDs are the platform's own content identifiers (they name a title page; they are not video content), and no JustWatch prose, artwork, or pricing data is used. The maintainer's decision to include the matched data, with the sources named here, is recorded in the project's decision log.
+
+### Stage C update (2026-11-04) — *The Flash* on Netflix Canada
+
+- **What arrived:** all **184** *Flash* episodes now carry a `netflix` link (the bare numeric watch ID from the episode's own Netflix watch address), filled into the pack as **dataVersion 2** by a links-append-only pass (`fill_arrowverse_flash_ids.py`, a maintainer workspace pipeline, on the same pattern as the MCU fill): no episode content other than `links` changed, verified by canonical comparison with links stripped.
+- **How the IDs were obtained (stage B):** a signed-in browser harvest on Netflix Canada under §1H.7's blanket permission — metadata only, low volume, nothing played (the browser's protected-content error appears before playback). At the maintainer's direction every one of the 184 IDs was **individually click-verified** — each episode's own play control was clicked and the ID read from the address it landed on; **zero mismatches** across the whole pass, so no link in the pack rests on inference from neighbouring episode numbers (several seasons' first episodes sit outside their season's main ID block, which is exactly what the check was for).
+- **Still excluded:** *The Flash*'s Prime IDs (purchase listings only), exactly as before.
 
 ## 5. Canada availability — the full picture (re-verified 2026-11-04)
 
@@ -49,7 +55,7 @@ Per JustWatch Canada, checked episode by episode for all eight series on the day
 | Series | Episodes | Streams in Canada on | Purchase-only on | In the pack |
 |---|---|---|---|---|
 | Arrow | 170 | **Prime Video** (169 of 170) | Amazon Video, Apple TV Store | 169 Prime links; S4E8 checklist-only |
-| The Flash | 184 | **Netflix** (all 184) | Amazon Video, Apple TV Store | Checklist-only for now; Netflix IDs are the stage-B harvest |
+| The Flash | 184 | **Netflix** (all 184) | Amazon Video, Apple TV Store | 184 Netflix links (stage-B harvest, filled at dataVersion 2) |
 | Supergirl | 126 | — nothing — | Apple TV Store | Checklist-only |
 | DC's Legends of Tomorrow | 110 | — nothing — | Apple TV Store | Checklist-only |
 | Batwoman | 51 | — nothing — | Apple TV Store | Checklist-only |
