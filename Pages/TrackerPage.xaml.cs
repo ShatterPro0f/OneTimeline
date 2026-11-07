@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls.Shapes;
 using OneChicago.Models;
@@ -67,7 +68,7 @@ public partial class TrackerPage : ContentPage
 	private bool _setupPrompted;
 	private Episode? _lastAutoChecked;
 
-	// Spoiler guard: which episode the hero is showing, and whether Sam
+	// Spoiler guard: which episode the hero is showing, and whether the user
 	// has tapped to reveal its description on this view.
 	private string? _heroKey;
 	private bool _heroDescRevealed;
@@ -87,6 +88,13 @@ public partial class TrackerPage : ContentPage
 		// recognizer. Since v1.4 the whole hero header is tappable (it
 		// opens the episode details); OnHeroCardTapped keeps the reveal
 		// behaviour as its first branch, so that recognizer is gone.
+
+		// The watch-order rows live in ONE collection for the page's
+		// whole lifetime, assigned here exactly once (v2.2.1 — see
+		// BuildRows for why a fresh items source per refresh was the
+		// scroll-position bug).
+		EpisodeList.ItemsSource = _rows;
+		EpisodeList.Scrolled += OnListScrolled;
 	}
 
 	protected override async void OnAppearing()
@@ -144,7 +152,7 @@ public partial class TrackerPage : ContentPage
 	/// Android 13+ makes notifications a permission. The first time
 	/// this version runs with background mode on and the permission
 	/// missing, explain briefly and fire the system request. Whatever
-	/// Sam chooses is final — the marker is set before asking, this
+	/// the user chooses is final — the marker is set before asking, this
 	/// never nags twice, and Settings keeps showing the honest state
 	/// (background mode unprotected) if he declines.</summary>
 	private async Task MaybePromptForNotificationsAsync()
@@ -190,20 +198,26 @@ public partial class TrackerPage : ContentPage
 		if (!store.Loaded) return;
 
 		// The whole of Feature 2 (iteration 7): one line + one thin
-		// bar. Sam rejected a stats page as bloat — nothing else.
-		int watched = store.WatchedCount, total = store.Episodes.Count;
-		int pct = total > 0 ? (int)Math.Round(100.0 * watched / total) : 0;
+		// bar. A stats page was rejected as bloat — nothing else.
+		// Since v2.2.2 (Decision 1M) the line reports TIME instead
+		// of counts, over exactly the scope the count line used:
+		// every entry in the active universe, watched = checked
+		// off. Entries with no runtime value contribute 0 minutes
+		// — never estimated. The bar follows the same figures, so
+		// header and bar can never disagree.
+		var (totalMinutes, watchedMinutes) = RuntimeStats.Sum(store.Episodes);
+		int pct = RuntimeStats.Percent(watchedMinutes, totalMinutes);
 		// No active universe (v2.1.0): a fresh install before its
 		// first download, or an upgrade whose packs are still
-		// pending — the count line becomes the directions instead
-		// of a meaningless "0 of 0".
+		// pending — the line becomes the directions instead of a
+		// meaningless "0 of 0".
 		ProgressLabel.Text =
 			store.ActiveUniverseId.Length == 0
 				? (store.PendingRestoreIds.Count > 0
 					? "Your universes need a quick download to come back — Settings → Get more universes."
 					: "No universes yet — add some in Settings → Get more universes.")
-				: $"{watched} of {total} episodes · {pct}%";
-		OverallProgress.Progress = total > 0 ? (double)watched / total : 0;
+				: $"Total {RuntimeStats.Format(totalMinutes)} · Watched {RuntimeStats.Format(watchedMinutes)} · {pct}%";
+		OverallProgress.Progress = RuntimeStats.Fraction(watchedMinutes, totalMinutes);
 		RefreshUniverseSwitcher();
 		RefreshHero();
 		BuildUpNext();
@@ -305,7 +319,7 @@ public partial class TrackerPage : ContentPage
 		}
 		// Spoiler guard (default OFF = description always shown, exactly
 		// as before): when ON, an unwatched episode's description stays
-		// hidden until Sam taps it. The hero episode is by definition
+		// hidden until the user taps it. The hero episode is by definition
 		// unwatched.
 		HeroDescription.Text = AppHost.Store.SpoilerGuardEnabled && !_heroDescRevealed
 			? "Description hidden until watched — tap to reveal"
@@ -318,7 +332,7 @@ public partial class TrackerPage : ContentPage
 	}
 
 	/// <summary>Short show names for the crossover line — the compact
-	/// forms Sam sees in the watch order ("P.D.", "SVU"), not the
+	/// forms shown in the watch order ("P.D.", "SVU"), not the
 	/// spelled-out display names.</summary>
 	private static string ShortShowName(string show) => show switch
 	{
@@ -523,14 +537,56 @@ public partial class TrackerPage : ContentPage
 
 	// ---- Watch Order -----------------------------------------------------
 
+	/// <summary>The watch-order rows — ONE collection for the page's
+	/// whole lifetime, assigned to EpisodeList.ItemsSource exactly
+	/// once (in the constructor). Scroll fix (v2.2.1): BuildRows used
+	/// to hand the list a brand-new List on every refresh, and a new
+	/// items source makes the native list throw away its scroll
+	/// state and lay out again from the top. RefreshAll runs on every
+	/// OnAppearing, so backing out of an episode's details always
+	/// landed the user at the top of the watch order. The page and the
+	/// navigation were never the problem — the items-source reset
+	/// was.</summary>
+	private readonly ObservableCollection<EpisodeRow> _rows = new();
+
+	/// <summary>Scroll anchor: the key of the episode at the top of
+	/// the viewport, plus the universe and search text it belongs
+	/// to. Only consulted when a rebuild changes the row sequence —
+	/// and only restored within that same universe and search, so a
+	/// position is never carried into a different list (a universe
+	/// switch always starts at the top, as before).</summary>
+	private string? _anchorKey;
+	private string _anchorUniverseId = "";
+	private string _anchorQuery = "";
+
+	private string CurrentQuery() => (SearchEntry.Text ?? "").Trim().ToLowerInvariant();
+
+	private void OnListScrolled(object sender, ItemsViewScrolledEventArgs e)
+	{
+		// At the very top, or still up in the header where no episode
+		// row is the first visible item, there is no position to
+		// remember — and any older anchor no longer describes where
+		// the user is, so it goes.
+		if (e.VerticalOffset <= 0
+			|| e.FirstVisibleItemIndex < 0
+			|| e.FirstVisibleItemIndex >= _rows.Count)
+		{
+			_anchorKey = null;
+			return;
+		}
+		_anchorKey = _rows[e.FirstVisibleItemIndex].Ep.Key;
+		_anchorUniverseId = AppHost.Store.ActiveUniverseId;
+		_anchorQuery = CurrentQuery();
+	}
+
 	private void BuildRows()
 	{
 		var store = AppHost.Store;
 		if (!store.Loaded) return;
 
-		var q = (SearchEntry.Text ?? "").Trim().ToLowerInvariant();
+		var q = CurrentQuery();
 		var next = store.UpNext;
-		EpisodeList.ItemsSource = store.Episodes
+		var desired = store.Episodes
 			// Category switches (2026-11-04): a hidden category's
 			// entries leave the tracker entirely — search included.
 			.Where(e => store.CategoryVisibleFor(e))
@@ -538,6 +594,66 @@ public partial class TrackerPage : ContentPage
 				|| $"{e.Title} {e.Code} {e.Show} {e.DisplayShow} {e.Order}".ToLowerInvariant().Contains(q))
 			.Select(e => new EpisodeRow(e, next != null && e.Key == next.Key))
 			.ToList();
+
+		// Same episodes in the same order — the ordinary refresh:
+		// returning from a detail page, a watched toggle, a TV
+		// auto-check. Update the rows in place: the fresh row objects
+		// rebind every visual (checkmark, current-episode highlight,
+		// badges), the collection itself never changes, the native
+		// list is never reset, and the scroll position survives
+		// exactly where the user left it.
+		bool sameSequence = _rows.Count == desired.Count;
+		for (int i = 0; sameSequence && i < desired.Count; i++)
+			if (_rows[i].Ep.Key != desired[i].Ep.Key)
+				sameSequence = false;
+		if (sameSequence)
+		{
+			for (int i = 0; i < desired.Count; i++)
+				_rows[i] = desired[i];
+			return;
+		}
+
+		// The row sequence itself changed — a search edit, a category
+		// switch, a universe switch, a dataset change. Capture where
+		// the user was before rebuilding; afterwards, put them back
+		// on the same episode, but only within the same universe and
+		// the same search. A universe switch (or a new search) makes
+		// the old position meaningless: no restore, top of the list,
+		// exactly as it behaved before this fix.
+		string? anchorKey = _anchorKey;
+		string anchorUniverseId = _anchorUniverseId;
+		string anchorQuery = _anchorQuery;
+		_anchorKey = null;
+
+		_rows.Clear();
+		foreach (var row in desired)
+			_rows.Add(row);
+
+		if (anchorKey == null
+			|| anchorUniverseId != store.ActiveUniverseId
+			|| anchorQuery != q)
+			return;
+
+		MainThread.BeginInvokeOnMainThread(() =>
+		{
+			// The context may have moved on while this was queued
+			// (another refresh, a universe switch) — restore only
+			// into the exact list the anchor belongs to. Index 0 is
+			// skipped on purpose: scrolling to it would push the
+			// header off screen, changing the near-top position the
+			// user actually had.
+			if (AppHost.Store.ActiveUniverseId != anchorUniverseId
+				|| CurrentQuery() != anchorQuery)
+				return;
+			for (int i = 1; i < _rows.Count; i++)
+			{
+				if (_rows[i].Ep.Key == anchorKey)
+				{
+					EpisodeList.ScrollTo(i, position: ScrollToPosition.Start, animate: false);
+					return;
+				}
+			}
+		});
 	}
 
 	private void OnSearchChanged(object sender, TextChangedEventArgs e) => BuildRows();
@@ -551,7 +667,7 @@ public partial class TrackerPage : ContentPage
 	// ---- Play ------------------------------------------------------------
 
 	/// <summary>
-	/// The hero button follows the TV (Sam, v1.4). Priority: a running
+	/// The hero button follows the TV (since v1.4). Priority: a running
 	/// sequence owns the button ("Working…"); an autoplay countdown
 	/// owns the hero (label stays Play Now, and a tap fires the pending
 	/// episode immediately, as shipped). Otherwise the latest poll
@@ -561,7 +677,7 @@ public partial class TrackerPage : ContentPage
 	///    identity comes from the same last-started correspondence the
 	///    guided sequence's guard uses — but Pause is shown whenever
 	///    Prime is playing, since pausing whatever Prime is playing is
-	///    what Sam asked for; the stricter advancing test stays inside
+	///    what was asked for; the stricter advancing test stays inside
 	///    GuidedPlayer, untouched.)
 	///  - Prime paused at a real mid-episode position (> 30 s) →
 	///    "▶ Continue Watching", tap = one Play keypress to resume.

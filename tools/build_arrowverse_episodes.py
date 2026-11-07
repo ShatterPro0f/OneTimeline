@@ -5,7 +5,7 @@ Pipeline (mirrors build_mcu_episodes.py / build_csi_episodes.py):
 
   1. ORDER — arrowverse.info's "Arrowverse Episode Order" (the pack's
      named order document; snapshot cached in arrowverse-work/raw/).
-     830 rows; the pack keeps Sam's ruled scope (§1H.6): the 8
+     830 rows; the pack keeps the ruled scope (§1H.6): the 8
      live-action series incl. Constantine and Superman & Lois;
      Stargirl, Vixen and Freedom Fighters: The Ray are out.
      830 - 41 - 12 - 12 = 765 episodes. The build asserts this total

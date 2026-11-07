@@ -7,7 +7,7 @@ what this pack needs beyond a GTI:
   * offers are classified by monetizationType — only FLATRATE (or ADS,
     i.e. the ad-supported tier of a subscription service) offers count
     as "streams in Canada"; BUY/RENT offers are purchase pages and
-    their IDs are NEVER used as links (the rule Sam's §1H.6 amendment
+    their IDs are NEVER used as links (the rule the §1H.6 amendment
     restates, and the reason The Flash's Prime IDs stay out).
   * every package seen per show is recorded, so the run doubles as the
     Canada-availability re-verification the stage-A report needs.

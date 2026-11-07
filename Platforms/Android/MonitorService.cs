@@ -17,7 +17,7 @@ public static class MonitorServiceController
 {
 	public static void EnsureStarted()
 	{
-		// If the store has already loaded and Sam turned background
+		// If the store has already loaded and the user turned background
 		// mode off, don't start at all (the service would only have to
 		// stop itself again). Before first load we can't know yet —
 		// the service checks the toggle itself once the store is in.
@@ -98,7 +98,7 @@ public static class MonitorServiceController
 /// on; survives the UI being backgrounded and swiped from recents
 /// (stopWithTask=false); sticky if the system kills it. It stops only
 /// via the notification's Stop action, the Settings toggle, or a
-/// force-stop. No boot start — Sam opens the app once.
+/// force-stop. No boot start — the user opens the app once.
 ///
 /// The persistent notification is the "notification bar widget":
 /// current episode + live playback state, with Pause/Resume, Next
@@ -180,7 +180,7 @@ public class MonitorService : Service
 	}
 
 	/// <summary>Swiping the app from recents must NOT stop background
-	/// mode — Sam's whole point is that it keeps running. Deliberately
+	/// mode — the whole point is that it keeps running. Deliberately
 	/// does nothing.</summary>
 	public override void OnTaskRemoved(Intent? rootIntent) { }
 
@@ -220,7 +220,7 @@ public class MonitorService : Service
 		_initStarted = true;
 		try { await AppHost.Ready; } catch { /* store failed to load; the plain notification still shows */ }
 
-		// Honour the toggle: if Sam turned background mode off while
+		// Honour the toggle: if the user turned background mode off while
 		// this start was in flight, stop again right away.
 		if (AppHost.Store.Loaded && !AppHost.Store.BackgroundModeEnabled)
 		{
@@ -524,7 +524,7 @@ public class MonitorService : Service
 	/// render signature — play/pause, episode, countdown, and each
 	/// countdown second) post immediately; otherwise the 1-second
 	/// tick re-posts once a second so the position text moves by the
-	/// second, as Sam asked (iteration 7 — the earlier ~5 s throttle
+	/// second, as originally specified (iteration 7 — the earlier ~5 s throttle
 	/// made the position visibly lag). OnlyAlertOnce is set on the
 	/// notification, so per-second re-posts never buzz. The 1 s floor
 	/// also collapses the duplicate requests a single state change

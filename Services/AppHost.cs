@@ -18,7 +18,7 @@ public static class AppHost
 	private static async Task InitAsync()
 	{
 		await Store.LoadAsync();
-		// Apply Sam's saved theme selection (App applied Light Basic at
+		// Apply the saved theme selection (App applied Light Basic at
 		// startup so the first frame was never unstyled). The selection
 		// may be "system" (iteration 9), which resolves through the
 		// phone's current light/dark mode — so compare the selection

@@ -12,8 +12,9 @@ public enum AutoplayPhase
 
 /// <summary>
 /// Autoplay: when RokuMonitor's completion detection auto-checks the
-/// current episode (Prime playing, position ≥92% of the listed runtime,
-/// or a clear end-of-playback after ≥65%), the episode is already marked
+/// current episode (Prime playing, position reaches the listed end —
+/// the credits start — in Balanced mode, or a clear end-of-playback
+/// after ≥65%), the episode is already marked
 /// watched by the monitor — this coordinator handles what happens next:
 ///
 ///  - If autoplay is off, nothing.
@@ -25,7 +26,7 @@ public enum AutoplayPhase
 ///    through GuidedPlayer.ResolveTargetAsync, so an advance can
 ///    switch streaming platforms — and TV channels — mid-order.)
 ///  - Otherwise a countdown runs on the hero ("Next: … — playing
-///    in N s", with Cancel). Its length is Sam's Settings choice
+///    in N s", with Cancel). Its length is the user's Settings choice
 ///    (Store.AutoplayCountdownSeconds: free-form 0–600 s since
 ///    iteration 9, default 10; 0 = start immediately, which the
 ///    countdown loop below expresses as a single 1 s tick).
@@ -37,7 +38,7 @@ public enum AutoplayPhase
 /// Runs only while the app is open: the monitor only polls in the
 /// foreground, and the completion event is raised on the main thread.
 ///
-/// Iteration 5 hardening (Sam's rollover restarted the new episode
+/// Iteration 5 hardening (the rollover restarted the new episode
 /// once, untouched): completion handling is idempotent per episode
 /// (see _handled), and neither a countdown nor a jump fires for an
 /// episode inside GuidedPlayer's 60-second post-success quiet period.

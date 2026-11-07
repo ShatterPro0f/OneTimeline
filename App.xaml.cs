@@ -24,7 +24,7 @@ public partial class App : Application
 
 		// The Light Basic palette must be in the resources before the
 		// first page renders (every page binds "Th*" DynamicResources).
-		// AppHost swaps in Sam's saved theme as soon as the store loads.
+		// AppHost swaps in the saved theme as soon as the store loads.
 		ThemeService.Apply(ThemeService.Light);
 
 		MainPage = new AppShell();
@@ -53,7 +53,7 @@ public partial class App : Application
 	/// Called only from foreground lifecycle points, as Android's
 	/// background-start restrictions require. The service itself checks
 	/// the persisted Background mode toggle once the store is loaded
-	/// and stops itself if Sam turned it off — so this call is safe on
+	/// and stops itself if the user turned it off — so this call is safe on
 	/// every launch/resume.</summary>
 	private static void StartBackgroundService()
 	{

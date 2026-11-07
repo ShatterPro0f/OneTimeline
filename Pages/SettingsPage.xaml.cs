@@ -4,31 +4,39 @@ using OneChicago.Services;
 namespace OneChicago.Pages;
 
 /// <summary>
-/// The settings page (reached from the gear on the main page):
-///  - TV: address + connection check, Find My TV (SSDP / subnet probe),
-///    the "TV asks for a profile" toggle for the Play sequence, and
-///    the status-check interval (a free-form seconds field since
-///    iteration 9).
-///  - Autoplay: on/off, countdown length (free-form seconds since
-///    iteration 9), session limit, and how episode endings (credits)
-///    are judged.
-///  - Background mode: the foreground-service switch, the
-///    notifications-permission state Android requires for it, and
-///    the battery guidance (production Decision 5: no exemption
-///    request ships — plain instructions plus a route to the app's
-///    system settings page).
+/// The settings page (reached from the gear on the main page).
+/// Since v2.3.0 the page is five collapsible groups — one tappable
+/// header row each, the body shown only while the group is open;
+/// the open-set is the user's, persisted in the Store
+/// (Store.IsSettingsGroupOpen / SetSettingsGroupOpen) and restored
+/// on every visit. Only TV starts open on a fresh install:
+///  - TV: address + connection check, Find My TV (SSDP / subnet
+///    probe), the "TV asks for a profile" toggle for the Play
+///    sequence, and the status-check interval (a free-form seconds
+///    field since iteration 9).
+///  - Universes &amp; services: the universe include switches
+///    (Decision 1C, shared with setup's Universes step —
+///    UniverseSection), the downloadable-pack manager
+///    (PackSection), the per-universe content-type switches
+///    (CategorySection — shown only where a universe mixes
+///    categories), and the My Services switches.
+///  - Playback: Autoplay (on/off, countdown length — a free-form
+///    seconds field since iteration 9 — session limit, and how
+///    episode endings (credits) are judged) and Background mode
+///    (the foreground-service switch, the notifications-permission
+///    state Android requires for it, and the battery guidance —
+///    production Decision 5: no exemption request ships, plain
+///    instructions plus a route to the app's system settings page).
 ///  - Appearance: "Match system" plus the five themes, and the
 ///    spoiler guard.
-///  - Backup: export / import / start over. Exports are stamped
-///    with the active universe; an import applies only to its own
-///    universe (Decision 1C).
-///  - Setup (Decision 7): re-run the first-run setup flow.
-///  - Universes (Decision 1C): the include switches, shared with
-///    setup's Universes step (UniverseSection).
-///  - About: version, the TVmaze attribution and non-affiliation
-///    notice (Decision 1), and "Share diagnostics" (Decision 6).
-/// Every setting defaults to the shipped v1.2 behaviour; nothing here
-/// changes anything until the user taps it.
+///  - Setup, backup &amp; about: re-run the first-run setup flow
+///    (Decision 7); Backup — export / import / start over, exports
+///    stamped with the active universe and applying only to their
+///    own universe (Decision 1C); About — version, the TVmaze
+///    attribution and non-affiliation notice (Decision 1), and
+///    "Share diagnostics" (Decision 6).
+/// The grouping is layout only: every control, handler and default
+/// is what it was when the sections stood in one long scroll.
 /// </summary>
 public partial class SettingsPage : ContentPage
 {
@@ -63,9 +71,55 @@ public partial class SettingsPage : ContentPage
 		DataLabel.Text = $"{store.Episodes.Count} episodes in watch order · {store.WatchedCount} watched · check-offs and settings are saved on this phone only.";
 	}
 
+	// ---- Groups (v2.3.0) ---------------------------------------------
+	// The page's five collapsible groups. The Store owns which are
+	// open (persisted); this page only renders that state and flips
+	// it on a header tap. All section building in LoadUi runs the
+	// same whether its group is open or closed — content builds
+	// into hidden containers exactly as it built into scrolled-off
+	// ones before the grouping.
+
+	private (string Id, VerticalStackLayout Body, Label Chevron)[] GroupViews() => new[]
+	{
+		(Store.SettingsGroupTv, TvGroupBody, TvGroupChevron),
+		(Store.SettingsGroupUniverses, UniversesGroupBody, UniversesGroupChevron),
+		(Store.SettingsGroupPlayback, PlaybackGroupBody, PlaybackGroupChevron),
+		(Store.SettingsGroupAppearance, AppearanceGroupBody, AppearanceGroupChevron),
+		(Store.SettingsGroupSetup, SetupGroupBody, SetupGroupChevron),
+	};
+
+	private void ApplyGroupStates()
+	{
+		var store = AppHost.Store;
+		foreach (var (id, body, chevron) in GroupViews())
+		{
+			bool open = store.IsSettingsGroupOpen(id);
+			body.IsVisible = open;
+			chevron.Text = open ? "▾" : "▸";
+		}
+	}
+
+	private void ToggleGroup(string id)
+	{
+		var store = AppHost.Store;
+		store.SetSettingsGroupOpen(id, !store.IsSettingsGroupOpen(id));
+		ApplyGroupStates();
+	}
+
+	private void OnTvGroupTapped(object sender, TappedEventArgs e) => ToggleGroup(Store.SettingsGroupTv);
+
+	private void OnUniversesGroupTapped(object sender, TappedEventArgs e) => ToggleGroup(Store.SettingsGroupUniverses);
+
+	private void OnPlaybackGroupTapped(object sender, TappedEventArgs e) => ToggleGroup(Store.SettingsGroupPlayback);
+
+	private void OnAppearanceGroupTapped(object sender, TappedEventArgs e) => ToggleGroup(Store.SettingsGroupAppearance);
+
+	private void OnSetupGroupTapped(object sender, TappedEventArgs e) => ToggleGroup(Store.SettingsGroupSetup);
+
 	private void LoadUi()
 	{
 		_loading = true;
+		ApplyGroupStates();
 		var store = AppHost.Store;
 		IpEntry.Text = store.TvIp;
 		PollEntry.Text = store.PollSeconds.ToString();
@@ -358,7 +412,6 @@ public partial class SettingsPage : ContentPage
 	private static string CreditsText(string mode) => mode switch
 	{
 		Store.CreditsLetPlay => "Let credits play ›",
-		Store.CreditsEarly => "Jump early ›",
 		_ => "Balanced ›",
 	};
 
@@ -368,7 +421,6 @@ public partial class SettingsPage : ContentPage
 		{
 			["Let credits play"] = Store.CreditsLetPlay,
 			["Balanced"] = Store.CreditsBalanced,
-			["Jump early"] = Store.CreditsEarly,
 		};
 		var pick = await DisplayActionSheet("Episode endings", "Cancel", null, labels.Keys.ToArray());
 		if (pick == null || !labels.TryGetValue(pick, out var mode)) return;

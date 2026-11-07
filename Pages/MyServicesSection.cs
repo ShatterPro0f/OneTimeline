@@ -4,7 +4,7 @@ namespace OneChicago.Pages;
 
 /// <summary>
 /// The My Services rows shared by setup and the Settings
-/// section of the same name (Sam's ruling, 2026-11-04): one row
+/// section of the same name (the project ruling, 2026-11-04): one row
 /// per streaming platform in the catalogue — its display name
 /// and an Include switch bound straight to the Store's one
 /// selection state, so the two surfaces can never disagree.

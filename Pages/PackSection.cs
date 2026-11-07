@@ -12,7 +12,7 @@ public enum PackSectionMode
 }
 
 /// <summary>
-/// The downloadable-pack component (Decision 1J; Sam's
+/// The downloadable-pack component (Decision 1J; the project
 /// rulings, 2026-11-04) — ONE component, two hosts, following
 /// the UniverseSection sharing pattern:
 ///

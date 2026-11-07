@@ -24,7 +24,7 @@ public partial class EpisodeDetailPage : ContentPage
 {
 	private readonly Episode _ep;
 
-	// Spoiler guard: whether Sam has tapped to reveal this episode's
+	// Spoiler guard: whether the user has tapped to reveal this episode's
 	// description on this view.
 	private bool _descRevealed;
 

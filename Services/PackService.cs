@@ -135,7 +135,7 @@ public static class PackService
 
 	/// <summary>
 	/// Restore the universes an upgraded install previously had
-	/// included but whose packs aren't on the device (Sam's
+	/// included but whose packs aren't on the device (the
 	/// upgrade guarantee, 2026-11-04): fetch each one's dataset
 	/// and install it. Progress lives in the state file and is
 	/// never touched by this — an install simply makes a dormant

@@ -164,13 +164,13 @@ public static class ThemeService
 
 	// ---- "Match system" selection (iteration 9) ----------------------
 
-	/// <summary>The pseudo-theme id persisted in the Store when Sam
+	/// <summary>The pseudo-theme id persisted in the Store when the user
 	/// picks "Match system" in Settings. It is a SELECTION, never a
 	/// palette: <see cref="Current"/> always holds the resolved
 	/// ThemeDef (Light Basic or Dark Basic).</summary>
 	public const string SystemId = "system";
 
-	/// <summary>What Sam actually selected: a theme id, or "system".
+	/// <summary>What the user actually selected: a theme id, or "system".
 	/// Canonicalized by <see cref="ApplySelection"/> (unknown ids
 	/// become Light Basic's id, exactly as ById falls back).</summary>
 	public static string SelectedId { get; private set; } = Light.Id;

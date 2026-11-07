@@ -7,7 +7,7 @@ and applies the banked Disney+/Netflix IDs.
 Pipeline (mirrors build_csi_episodes.py, the CSI pipeline):
   - StorytellingDB's MCU timeline (storytellingdb.com, by Jason)
     is the source of truth for WATCH ORDER — episode-by-episode
-    in-universe chronology (Sam's ruling, production-decisions.md
+    in-universe chronology (the project ruling, production-decisions.md
     §1F/§1H.4). The site renders its table from a Google Sheets
     CSV through the Ninja Tables WordPress plugin; the snapshot
     was retrieved through the table's own public data endpoint
@@ -21,7 +21,7 @@ Pipeline (mirrors build_csi_episodes.py, the CSI pipeline):
     and release dates from the order source; their descriptions
     and runtimes come from JustWatch (fetch_mcu_ids.py).
 
-Scope (Sam's rulings, production-decisions.md §1H.1 as corrected
+Scope (the project rulings, production-decisions.md §1H.1 as corrected
 2026-11-04 12:18 EST): LIVE ACTION ONLY. Animation is out (What
 If…?, Eyes of Wakanda, Marvel Zombies, I Am Groot, and — already
 absent from the order source — YFNSM and X-Men '97); Helstrom is

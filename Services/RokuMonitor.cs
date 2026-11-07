@@ -9,17 +9,22 @@ namespace OneChicago.Services;
 /// status into tracker behaviour:
 ///
 ///  - a live "Now watching" reading for the Up Next episode, and
-///  - auto check-off when Sam actually watches an episode through.
+///  - auto check-off when the user actually watches an episode through.
 ///
 /// Auto check-off rules (conservative on purpose):
 ///  - Prime (channel 13) must be the active plugin, and the position must
 ///    have been seen ADVANCING in state=play for the current Up Next
 ///    episode — a paused or static position never checks anything off.
-///  - Trigger A: position reaches >= 92% of the episode's TVmaze runtime.
-///    (Iteration 3: that fraction is a Settings parameter — "balanced"
-///    is the shipped 92% exactly; "early" uses 85%; "credits" disables
-///    Trigger A so only Trigger B can check an episode off. Trigger B
-///    itself is never re-parameterised.)
+///  - Trigger A: position reaches the episode's listed end.
+///    (Iteration 3: that point is a Settings parameter — "balanced"
+///    was 92% of the listed runtime until v2.3.1; the on-TV
+///    finding was that 92% cut away several minutes before the
+///    real end, so "balanced" is now 100% — the listed end IS
+///    where the credits start. "credits" disables Trigger A so
+///    only Trigger B can check an episode off. The iteration-3
+///    "early" mode (85%) was removed in v2.3.1 under the project ruling;
+///    a saved "early" loads as "balanced". Trigger B itself is
+///    never re-parameterised.)
 ///  - Trigger B (end-of-playback): position had reached >= 65% of the
 ///    runtime and then the episode ends — position resets near zero, the
 ///    player leaves play/pause, or Prime stops being the active app.
@@ -40,7 +45,7 @@ namespace OneChicago.Services;
 ///  - After any auto check-off, no further auto check-off can happen until
 ///    the position has been seen back near the start (a reset) — so one
 ///    polling session can never run away checking off episode after
-///    episode Sam didn't watch.
+///    episode the user didn't watch.
 ///
 /// Multi-platform (Decision 1G): "Prime" above is now "a platform
 /// the current episode could be playing on" — the platforms of
@@ -176,11 +181,15 @@ public class RokuMonitor
 		// Credits-threshold setting, read as a parameter (see class
 		// doc). +Infinity for "credits" makes Trigger A's comparison
 		// simply never true — the detection flow is otherwise identical.
+		// "balanced" (v2.3.1) is 1.0 exactly: Trigger A fires when the
+		// position reaches the listed end — the credits start. No
+		// early offset and no added tolerance: while playing, the
+		// monitor polls every second, so detection lands within
+		// ~1 s of the threshold on its own.
 		double triggerAFraction = _store.CreditsThreshold switch
 		{
-			Store.CreditsEarly => 0.85,
 			Store.CreditsLetPlay => double.PositiveInfinity,
-			_ => 0.92,
+			_ => 1.0,
 		};
 
 		// Iteration 7.1 — resume handling. An observed pause -> play
@@ -191,7 +200,7 @@ public class RokuMonitor
 		// accumulate toward the sustained streak. The first playing
 		// position after the transition also re-baselines the session
 		// if it sits far below the high-water mark: that's a
-		// restart-like reading (or Sam rewound and replayed), i.e. a
+		// restart-like reading (or the user rewound and replayed), i.e. a
 		// new session — the pre-pause maximum must stop serving as
 		// "got well into it" evidence. A genuine resume reads within
 		// a second or two of the paused position, nowhere near half
@@ -247,7 +256,8 @@ public class RokuMonitor
 			if (pos > _maxPosition) _maxPosition = pos;
 			_lastPosition = pos;
 
-			// Trigger A: ran (nearly) the whole listed runtime.
+			// Trigger A: position reached the mode's end point
+			// (for "balanced", the listed end — the credits start).
 			if (_sawAdvancing && pos >= triggerAFraction * runtimeMs)
 			{
 

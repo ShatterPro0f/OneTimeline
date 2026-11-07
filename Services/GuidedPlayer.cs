@@ -24,10 +24,10 @@ public class GuidedPlayResult
 
 /// <summary>
 /// The guided "Play" sequence: instead of firing one deep link and hoping,
-/// it walks the TV through everything Sam's set actually does, checking
+/// it walks the TV through everything the test setup actually does, checking
 /// the TV's own reports as it goes.
 ///
-/// Facts it is built around (observed on Sam's TV, 2026-11-03):
+/// Facts it is built around (observed on the test TV, 2026-11-03):
 ///  - Launching Prime cold lands on Prime's PROFILE selection menu;
 ///    a Select keypress picks the highlighted profile.
 ///  - If Prime is already the active app, no launch/profile steps.
@@ -39,7 +39,7 @@ public class GuidedPlayResult
 ///    13, state and a live position — never WHICH episode is playing.
 ///    Iteration 8 (below) is what that blindness forces on confirmation.
 ///
-/// Iteration 2 (Sam's reports from the first on-TV runs):
+/// Iteration 2 (reports from the first on-TV runs):
 ///  - SINGLE-FLIGHT: only one sequence runs at a time, process-wide.
 ///    Extra taps are dropped, never queued —
 ///    v1.1 queued one full sequence per tap, so repeated taps kept
@@ -47,7 +47,7 @@ public class GuidedPlayResult
 ///  - ALREADY-PLAYING GUARD: before sending anything, the TV is polled.
 ///    If the target episode is the last one this app started and it is
 ///    playing and advancing, the sequence ends with "Already playing"
-///    and sends NOTHING (protecting Sam's resume point). If that same
+///    and sends NOTHING (protecting the resume point). If that same
 ///    episode is merely paused on the TV, a Play keypress resumes it
 ///    instead of re-sending the link. If something DIFFERENT is playing,
 ///    the warm path is used (link via /input/, no launch/profile).
@@ -60,21 +60,21 @@ public class GuidedPlayResult
 ///    are gated on Store.ProfileSelectEnabled (default ON — identical
 ///    behaviour). OFF omits only those keypresses, nothing else.
 ///
-/// Iteration 5 (Sam's rollover glitch: after a perfect Fire→Med autoplay
+/// Iteration 5 (the rollover glitch: after a perfect Fire→Med autoplay
 /// handoff, the TV flashed Prime's PROFILE screen once and restarted
 /// Med, untouched):
 ///  - PLAYER TRUST: media-player outranks active-app. If the player
 ///    reports Prime in state=play, no /launch/ is ever sent — checked
 ///    both at the Step 1 launch decision and again before the Step 4
 ///    launch form (the only two launch sites). A launch restarts
-///    Prime's UI at its profile gate; that is exactly the flash Sam saw.
+///    Prime's UI at its profile gate; that is exactly the flash seen on the test TV.
 ///  - QUIET PERIOD: a confirmed successful start is remembered for
 ///    60 s. A repeat sequence for the same episode in that window,
 ///    reaching the point of sending commands with the TV state
 ///    ambiguous, is vetoed and sends nothing (the guard above still
 ///    gets first say for confirmed playing/paused states).
 ///
-/// Iteration 8 (Sam's background-autoplay incident, 2026-11-03: Med 1x01
+/// Iteration 8 (the background-autoplay incident, 2026-11-03: Med 1x01
 /// ended, the app checked it off, counted down, ran this sequence for
 /// P.D. 3x08 — and then displayed P.D. as playing with a live, advancing
 /// position, while the TV was in fact playing Med 1x02):
@@ -117,22 +117,42 @@ public class GuidedPlayResult
 /// behaviour (it is the proven path; its plugin checks now read
 /// through the sequence's match channel, which for Prime is
 /// channel 13 — the same test). Netflix and Disney+ run a
-/// simpler sibling sequence built only from steps Sam's TV
+/// simpler sibling sequence built only from steps the test TV
 /// proved: cold = /launch/ form of the deep link; warm = /input/
-/// form (the route Sam's Netflix episode test used); a ignored
+/// form (the route the Netflix episode test used); a ignored
 /// warm link escalates to the /launch/ form, which displaces;
 /// a cold launch that never brings the channel forward triggers
 /// one channel re-discovery and retry, then the plain-launch +
 /// /input/ fallback. Strict confirmation (WaitAfterLinkAsync)
 /// is shared, with page Selects DISABLED for these platforms —
 /// neither has a proven detail-page state, and no keypress is
-/// sent blind. PROFILE SELECTS ARE PRIME-ONLY: whether Netflix
-/// or Disney+ present a profile gate on a cold launch is
-/// untested on Sam's TV, so the streaming sequence sends none;
-/// if a gate is up, the sequence fails honestly and a warm
-/// retry (after the user picks a profile with the remote)
-/// works. Disney+ needs no profile step in Sam's tests — its
-/// /launch/ proofs went straight to the content.
+/// sent blind. As first shipped, the streaming sequence also
+/// sent NO profile Select: whether Netflix or Disney+ present
+/// a profile gate on a cold launch was untested from inside the
+/// app, and the Platform Tester proofs of Disney+ (which drove
+/// /launch/ directly) went straight to the content. Iteration
+/// 10 below corrects that for Disney+.
+///
+/// Iteration 10 (the in-app field report, 2026-11-04): Disney+ DOES
+/// present a profile selection screen on the app's cold
+/// launches — the same gate Prime has always had. The deep link
+/// sent with the launch stays pending behind the gate, and once
+/// a profile is picked the TV goes into the correct episode or
+/// film. So Disney+ now gets Prime's profile treatment: after
+/// every /launch/-form command, wait for the channel to reach
+/// the foreground, settle 1 s, send one Select IF
+/// Store.ProfileSelectEnabled (the same Settings toggle that
+/// gates Prime's picks, default ON), then wait 2 s — and the
+/// confirmation wait for that launch is judged against the
+/// baseline snapshot taken BEFORE the launch was sent (Prime's
+/// Step 4 pattern). The final fallback follows Prime's Step 1
+/// order: plain launch, profile pick, then the /input/ form.
+/// The warm /input/ first attempt stays ungated — if the app is
+/// already in a live session there is no gate; if it is sitting
+/// on the gate, the warm /launch/ escalation's pick gets past
+/// it. Netflix still sends no profile Select anywhere: no gate
+/// has been observed for it, and nothing is sent blind on a
+/// guess.
 /// </summary>
 public class GuidedPlayer
 {
@@ -242,7 +262,7 @@ public class GuidedPlayer
 		if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
 		{
 			// Single-flight: drop the tap, never queue it. A queued
-			// sequence replaying later is exactly what yanked Sam's
+			// sequence replaying later is exactly what yanked the
 			// episode back to the menu in v1.1.
 			return new GuidedPlayResult { Busy = true };
 		}
@@ -314,7 +334,7 @@ public class GuidedPlayer
 		{
 			// Same episode, paused on the TV: resume it with a Play
 			// keypress. Re-sending the deep link here could restart the
-			// episode and cost Sam his place.
+			// episode and cost the user their place.
 
 			await _roku.SendKeyAsync("Play");
 			if (await WaitAfterLinkAsync(g2, gatePageSelect: false, 6, 0, allowPageSelect: false) is { Hit: { } resumed })
@@ -433,7 +453,7 @@ public class GuidedPlayer
 			// position to ADVANCE between two polls inside a bounded
 			// window, and a freshly started stream can sit at state=play
 			// with a frozen position while it buffers (this is the
-			// leading explanation for Sam's rollover glitch: Med had
+			// leading explanation for the rollover glitch: Med had
 			// started, the sequence couldn't confirm it, and this launch
 			// form then dumped Prime back at its profile screen before
 			// bringing Med back). If the player says Prime is playing
@@ -466,12 +486,12 @@ public class GuidedPlayer
 
 	/// <summary>
 	/// The Netflix / Disney+ sequence (iteration 9) — built only
-	/// from steps proven on Sam's TV (platform-test-findings):
+	/// from steps proven on the test TV (platform-test-findings):
 	///  - Step 0 is Prime's already-playing guard, read against
 	///    this platform's channel: same episode advancing → send
 	///    nothing; same episode paused → one Play keypress resumes.
 	///  - WARM (the platform is the foreground app, or its player
-	///    is playing): the /input/ form first — the route Sam's
+	///    is playing): the /input/ form first — the route the
 	///    Netflix episode test proved — judged by the same strict
 	///    confirmation as Prime. If it's ignored, the /launch/
 	///    form follows: launching displaces whatever the channel
@@ -481,9 +501,12 @@ public class GuidedPlayer
 	///    comes to the foreground, the cached channel id may be
 	///    stale: re-discover once and retry at the fresh id. Last
 	///    resort: plain launch, wait for the foreground, /input/.
-	///  - NO profile Select and NO page Select anywhere: neither
-	///    platform has a proven gate/page state on Sam's TV, and
-	///    no keypress is sent blind (see the class doc).
+	///  - NO page Select anywhere: neither platform has a proven
+	///    detail-page state on the test TV, and no keypress is sent
+	///    blind. PROFILE Selects: Disney+ gets one after each
+	///    /launch/ form (iteration 10 — its launch gate is real),
+	///    gated on Store.ProfileSelectEnabled like Prime's;
+	///    Netflix gets none (no gate observed).
 	/// </summary>
 	private async Task<GuidedPlayResult> PlayStreamingAsync(Episode? episode, PlayTarget target, string episodeLabel)
 	{
@@ -495,6 +518,12 @@ public class GuidedPlayer
 		}
 		string channelId = target.ChannelId;
 		_matchPluginId = channelId;
+
+		// Disney+ presents a profile gate on launch (iteration 10);
+		// Netflix does not (no gate observed). Every Disney-only
+		// step below is gated on this flag so the Netflix path
+		// stays exactly as it was.
+		bool isDisney = platform.Signifier == PlatformCatalog.DisneySignifier;
 
 		bool sameAsLastStarted = episode != null
 			&& _store.LastStartedEpisodeKey == episode.Key
@@ -510,6 +539,28 @@ public class GuidedPlayer
 			if (episode != null && r.PositionMs is long hp)
 				_store.NoteEpisodeStarted(episode, hp, platform.Signifier);
 			return r;
+		}
+
+		// The Disney+ profile-gate step (iteration 10; Prime's
+		// Step 1 / Step 4 mechanics): after a /launch/-form
+		// command, wait for the channel to come to the foreground,
+		// settle, pick the highlighted profile (Settings toggle
+		// permitting), then give the gate time to hand over to the
+		// pending deep link. Each caller judges the launch
+		// afterwards against the baseline it captured BEFORE
+		// sending that launch. Disney+ only — Netflix never calls
+		// this.
+		async Task DisneyProfileGateAsync(string chId)
+		{
+			for (int i = 0; i < 6; i++)
+			{
+				if (await _roku.GetActiveAppIdAsync() == chId) break;
+				await Task.Delay(1000);
+			}
+			await Task.Delay(1000); // brief settle before the profile gate
+			if (_store.ProfileSelectEnabled)
+				await _roku.SendKeyAsync("Select");
+			await Task.Delay(2000);
 		}
 
 		// Step 0 — already-playing guard (Prime's shape, this
@@ -563,17 +614,26 @@ public class GuidedPlayer
 			if (w.Hit is { } hitW) return Hit(hitW);
 
 			// The launch form: displaces whatever the channel is
-			// showing when a warm link is ignored.
+			// showing when a warm link is ignored. Disney+ may be
+			// sitting ON its profile gate in the foreground here
+			// (the ungated /input/ attempt above cannot get past
+			// it), so the gate step follows the launch; the wait
+			// is judged against b2, captured before the launch.
 			var b2 = await _roku.GetMediaPlayerAsync();
 			await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+			if (isDisney) await DisneyProfileGateAsync(channelId);
 			var w2 = await WaitAfterLinkAsync(b2, gatePageSelect: false, 8, 0, allowPageSelect: false);
 			if (w2.Hit is { } hitW2) return Hit(hitW2);
 			return new GuidedPlayResult { Playing = false };
 		}
 
-		// Cold: the launch form.
+		// Cold: the launch form. Disney+ lands on its profile
+		// gate (iteration 10), so the gate step follows the
+		// launch; the wait is judged against bc, captured before
+		// the launch was sent (Prime's Step 4 pattern).
 		var bc = await _roku.GetMediaPlayerAsync();
 		await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+		if (isDisney) await DisneyProfileGateAsync(channelId);
 		var wc = await WaitAfterLinkAsync(bc, gatePageSelect: false, 10, 0, allowPageSelect: false);
 		if (wc.Hit is { } hitC) return Hit(hitC);
 
@@ -589,13 +649,17 @@ public class GuidedPlayer
 				_matchPluginId = channelId;
 				var br = await _roku.GetMediaPlayerAsync();
 				await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: false, target.MediaType);
+				if (isDisney) await DisneyProfileGateAsync(channelId);
 				var wr = await WaitAfterLinkAsync(br, gatePageSelect: false, 10, 0, allowPageSelect: false);
 				if (wr.Hit is { } hitR) return Hit(hitR);
 			}
 		}
 
 		// Final fallback: open the channel plainly, wait for the
-		// foreground, then the /input/ form.
+		// foreground, then the /input/ form. For Disney+ the
+		// plain launch lands on the profile gate, so the profile
+		// is picked BEFORE the link form is sent (Prime's Step 1
+		// order: launch → profile → link).
 		if (!await _roku.LaunchChannelAsync(channelId))
 		{
 			return new GuidedPlayResult { Playing = false };
@@ -606,6 +670,12 @@ public class GuidedPlayer
 			await Task.Delay(1000);
 		}
 		await Task.Delay(1000);
+		if (isDisney)
+		{
+			if (_store.ProfileSelectEnabled)
+				await _roku.SendKeyAsync("Select");
+			await Task.Delay(2000);
+		}
 		var bf = await _roku.GetMediaPlayerAsync();
 		await _roku.PlayOnChannelAsync(id, channelId, channelAlreadyActive: true, target.MediaType);
 		var wf = await WaitAfterLinkAsync(bf, gatePageSelect: false, 8, 0, allowPageSelect: false);

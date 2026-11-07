@@ -57,7 +57,7 @@ public class Episode
 	/// movies and episodes differently.</summary>
 	[JsonPropertyName("kind")] public string? Kind { get; set; }
 
-	/// <summary>The entry's content category (Sam's ruling,
+	/// <summary>The entry's content category (the project ruling,
 	/// 2026-11-04) — what KIND of content it is for the
 	/// per-universe category switches. Distinct from
 	/// <see cref="Kind"/>, which only drives the deep-link
@@ -115,7 +115,22 @@ public class Episode
 		_ => Show,
 	};
 
-	[JsonIgnore] public string SeasonEpisode => $"S{Season} E{EpisodeNumber}";
+	/// <summary>The per-entry indicator (Decision 1K): ONLY a
+	/// show episode renders a season/episode label. Every other
+	/// category renders a plain kind label, so a film, one-shot,
+	/// web entry or special never displays an S{n}E{n} label
+	/// (datasets carry season/episode numbers on those entries
+	/// only as ordering data, and the old unconditional label
+	/// showed e.g. "S1 E1" on movies and one-shots).</summary>
+	[JsonIgnore]
+	public string SeasonEpisode => EffectiveCategory switch
+	{
+		"film" => "Movie",
+		"one-shot" => "One-Shot",
+		"web" => "Web Series",
+		"special" => "Special",
+		_ => $"S{Season} E{EpisodeNumber}",
+	};
 
 	/// <summary>Air date in friendly form ("Nov 17, 2015"); falls back to
 	/// the raw dataset value when it doesn't parse.</summary>

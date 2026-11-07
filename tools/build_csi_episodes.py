@@ -2,7 +2,7 @@
 """Build episodes-csi.json for the One Timeline CSI pack.
 
 Pipeline (mirrors build_episodes.py, the Chicago pipeline):
-  - Google Sheet "CSI Universe Release Order" (Sam-supplied) is the
+  - Google Sheet "CSI Universe Release Order" (project-supplied) is the
     source of truth for WATCH ORDER and episode titles/dates as
     broadcast. It carries no usable season/episode numbering (its
     Code/Number columns are production numbering — see
@@ -12,7 +12,7 @@ Pipeline (mirrors build_episodes.py, the Chicago pipeline):
   - fetch_csi_ids.py then fills primeContentId + runtimeMinutes
     from JustWatch Canada.
 
-Scope (Sam's ruling, production-decisions.md §1E): the five CSI
+Scope (the project ruling, production-decisions.md §1E): the five CSI
 series + Without a Trace S6E6 "Where and Why" as a single cameo
 episode. Cold Case and the rest of Without a Trace are excluded.
 

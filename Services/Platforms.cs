@@ -11,7 +11,7 @@ namespace OneChicago.Services;
 /// channel's ECP id on any given TV), whether the platform's
 /// media-player reports a duration, and the shape of its content
 /// IDs. Behavioural evidence for every row: platform-test-findings
-/// (all three proven on Sam's TV, 2026-11-04).
+/// (all three proven on the test TV, 2026-11-04).
 /// </summary>
 public sealed class StreamingPlatform
 {

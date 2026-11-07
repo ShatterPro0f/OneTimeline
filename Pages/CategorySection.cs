@@ -5,7 +5,7 @@ namespace OneChicago.Pages;
 /// <summary>
 /// The per-universe content-category switches shared by
 /// setup's Universes step and the Settings Content types
-/// section (Sam's ruling, 2026-11-04): for each INCLUDED
+/// section (the project ruling, 2026-11-04): for each INCLUDED
 /// universe whose pack mixes more than one category of content
 /// (films beside episodes, one-shots, web extras…), a block
 /// naming the universe, then one row per category — display

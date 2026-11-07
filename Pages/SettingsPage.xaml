@@ -8,8 +8,15 @@
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="8">
 
-            <!-- TV -->
-            <Label Text="TV" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,8,0,2" />
+            <!-- GROUP: TV (open by default) -->
+            <Grid ColumnDefinitions="*,Auto" Padding="0,6,0,4" Margin="0,8,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnTvGroupTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="TV" FontSize="17" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label x:Name="TvGroupChevron" Grid.Column="1" Text="▾" FontSize="17" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <VerticalStackLayout x:Name="TvGroupBody" Spacing="8">
             <Label Text="TV address" FontSize="15" TextColor="{DynamicResource ThText}" />
             <Border BackgroundColor="{DynamicResource ThFieldBg}" StrokeThickness="0" Padding="10,0">
                 <Border.StrokeShape>
@@ -52,16 +59,20 @@
                    Text="Enter 10–300 seconds" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="How often the app asks the TV what it's doing while nothing is playing. While an episode is playing, the app already checks every second — this only sets the pace for the quiet times." />
+            </VerticalStackLayout>
 
-            <!-- SETUP -->
-            <Label Text="SETUP" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
-            <Button x:Name="RunSetupButton" Text="Run setup again" Clicked="OnRunSetup"
-                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
-            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
-                   Text="Revisit the first-run setup: your starting point in the watch order, your services, the TV connection, and how streaming links work. (Short version: paste a link or ID on an episode's page, under “Your streaming links”, and Play can start that episode.)" />
+            <!-- GROUP: Universes & services -->
+            <Grid ColumnDefinitions="*,Auto" Padding="0,6,0,4" Margin="0,22,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnUniversesGroupTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Universes &amp; services" FontSize="17" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label x:Name="UniversesGroupChevron" Grid.Column="1" Text="▸" FontSize="17" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <VerticalStackLayout x:Name="UniversesGroupBody" Spacing="8" IsVisible="False">
 
             <!-- UNIVERSES -->
-            <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label Text="UNIVERSES" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,8,0,2" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="The universes included in your app — the same choice setup offered. Each universe keeps its own watch order and progress. Turning one off never deletes its progress: turn it back on and everything is where you left it." />
             <VerticalStackLayout x:Name="UniverseList" Spacing="0" />
@@ -85,9 +96,20 @@
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="The streaming services you have — the same choice setup offered. Play only ever uses a service picked here: an episode that only lives on a service you don't have has no Play button and is ticked off by hand, like any checklist entry." />
             <VerticalStackLayout x:Name="ServicesList" Spacing="0" />
+            </VerticalStackLayout>
+
+            <!-- GROUP: Playback -->
+            <Grid ColumnDefinitions="*,Auto" Padding="0,6,0,4" Margin="0,22,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnPlaybackGroupTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Playback" FontSize="17" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label x:Name="PlaybackGroupChevron" Grid.Column="1" Text="▸" FontSize="17" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <VerticalStackLayout x:Name="PlaybackGroupBody" Spacing="8" IsVisible="False">
 
             <!-- AUTOPLAY -->
-            <Label Text="AUTOPLAY" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
+            <Label Text="AUTOPLAY" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,8,0,2" />
             <Grid ColumnDefinitions="*,Auto" Padding="0,4">
                 <Label Text="Play the next episode automatically" FontSize="16" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
                 <Switch Grid.Column="1" x:Name="AutoplaySwitch" Toggled="OnAutoplayToggled" VerticalOptions="Center" />
@@ -127,7 +149,7 @@
                 <Label Grid.Column="1" x:Name="CreditsValueLabel" FontSize="16" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
             </Grid>
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
-                   Text="“Episode endings” decides when an episode counts as finished: Balanced uses the full episode plus its ending; Jump early moves on sooner; Let credits play waits for playback to actually end." />
+                   Text="“Episode endings” decides when an episode counts as finished: Balanced moves on when the credits start, at the episode's listed end; Let credits play waits for playback to actually end." />
 
             <Label x:Name="AutoplayNoteLabel" FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap" Margin="0,6,0,0" />
 
@@ -144,9 +166,19 @@
                    Text="Battery: background watching works best when this app isn't battery-optimized — some phones, Samsung especially, otherwise put it to sleep mid-evening. On the app settings page, open Battery and choose “Unrestricted”." />
             <Button x:Name="AppSettingsButton" Text="Open app settings" Clicked="OnOpenAppSettings" IsVisible="False"
                     BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,2,0,0" />
+            </VerticalStackLayout>
+
+            <!-- GROUP: Appearance -->
+            <Grid ColumnDefinitions="*,Auto" Padding="0,6,0,4" Margin="0,22,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnAppearanceGroupTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Appearance" FontSize="17" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label x:Name="AppearanceGroupChevron" Grid.Column="1" Text="▸" FontSize="17" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <VerticalStackLayout x:Name="AppearanceGroupBody" Spacing="8" IsVisible="False">
 
             <!-- APPEARANCE -->
-            <Label Text="APPEARANCE" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
             <VerticalStackLayout x:Name="ThemeList" Spacing="0" />
 
             <Grid ColumnDefinitions="*,Auto" Padding="0,10,0,0">
@@ -155,6 +187,24 @@
             </Grid>
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="Spoiler guard: descriptions of episodes you haven't watched are hidden until you tap to reveal them. Watched episodes always show theirs." />
+            </VerticalStackLayout>
+
+            <!-- GROUP: Setup, backup & about -->
+            <Grid ColumnDefinitions="*,Auto" Padding="0,6,0,4" Margin="0,22,0,0">
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSetupGroupTapped" />
+                </Grid.GestureRecognizers>
+                <Label Text="Setup, backup &amp; about" FontSize="17" FontAttributes="Bold" TextColor="{DynamicResource ThText}" VerticalOptions="Center" />
+                <Label x:Name="SetupGroupChevron" Grid.Column="1" Text="▸" FontSize="17" TextColor="{DynamicResource ThText3}" VerticalOptions="Center" />
+            </Grid>
+            <VerticalStackLayout x:Name="SetupGroupBody" Spacing="8" IsVisible="False">
+
+            <!-- SETUP -->
+            <Label Text="SETUP" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,8,0,2" />
+            <Button x:Name="RunSetupButton" Text="Run setup again" Clicked="OnRunSetup"
+                    BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" />
+            <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
+                   Text="Revisit the first-run setup: your starting point in the watch order, your services, the TV connection, and how streaming links work. (Short version: paste a link or ID on an episode's page, under “Your streaming links”, and Play can start that episode.)" />
 
             <!-- BACKUP -->
             <Label Text="BACKUP" FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource ThText3}" CharacterSpacing="1.2" Margin="0,26,0,2" />
@@ -183,6 +233,7 @@
                     BackgroundColor="{DynamicResource ThBtn2Bg}" TextColor="{DynamicResource ThAccent}" FontSize="16" CornerRadius="12" HeightRequest="48" Margin="0,8,0,0" />
             <Label FontSize="13" TextColor="{DynamicResource ThText3}" LineBreakMode="WordWrap"
                    Text="Builds a short summary of the app's state — no TV address, no device serial numbers, no full episode links, watch history as counts only — shows it to you first, and shares it only when you tap Share." />
+            </VerticalStackLayout>
 
         </VerticalStackLayout>
     </ScrollView>

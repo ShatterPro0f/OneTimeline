@@ -34,7 +34,7 @@ public class DatasetFile
 	[JsonPropertyName("version")] public int Version { get; set; } = 1;
 
 	/// <summary>The universe's display name, declared by the pack
-	/// itself (Decision 1J + Sam's unification ruling, 2026-11-04:
+	/// itself (Decision 1J + the unification ruling, 2026-11-04:
 	/// EVERY pack — the ones that once shipped inside the app and
 	/// downloaded ones alike — carries the same self-describing
 	/// envelope, and the app registers universes from these fields,

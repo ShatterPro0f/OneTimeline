@@ -18,8 +18,8 @@
 		<ApplicationId>app.onetimeline</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
-		<ApplicationVersion>14</ApplicationVersion>
+		<ApplicationDisplayVersion>2.3.1</ApplicationDisplayVersion>
+		<ApplicationVersion>20</ApplicationVersion>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
@@ -37,7 +37,7 @@
 		<!-- Raw Assets (also remove the "Resources\Raw" prefix). -->
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 		<!-- Universe datasets are NEVER embedded (Decision 1J,
-		     Sam's ruling 2026-11-04): every pack — One Chicago
+		     the project ruling 2026-11-04): every pack — One Chicago
 		     and CSI included — installs from the downloadable
 		     pack index, and a fresh install starts with no
 		     universes at all. Dataset files may sit in
@@ -48,7 +48,7 @@
 
 	<PropertyGroup>
 		<!-- Production (Google Play): an App Bundle, not a sideload APK.
-		     Sam's personal build keeps AndroidPackageFormat=apk. -->
+		     The personal build keeps AndroidPackageFormat=apk. -->
 		<AndroidPackageFormat>aab</AndroidPackageFormat>
 	</PropertyGroup>
 
@@ -56,5 +56,10 @@
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
 	</ItemGroup>
+
+	<!-- Local release signing (keystore path + alias, passwords from the
+	     ONETIMELINE_KEYSTORE_PASS environment variable). The props file is
+	     untracked and gitignored; without it, builds use the debug key. -->
+	<Import Project="Signing.local.props" Condition="Exists('Signing.local.props')" />
 
 </Project>

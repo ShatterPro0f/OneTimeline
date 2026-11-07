@@ -149,7 +149,7 @@ public class Store
 	/// pre-download build — and restores automatically when its
 	/// dataset downloads (PackService.RestorePendingAsync). A
 	/// fresh install wants nothing: setup's first step is the
-	/// pack picker (Sam's ruling, 2026-11-04).</summary>
+	/// pack picker (the project ruling, 2026-11-04).</summary>
 	private readonly List<string> _wanted = new();
 
 	/// <summary>The packs installed on this device, in install
@@ -260,7 +260,7 @@ public class Store
 	/// sequence actually got playing on the TV, and the last playback
 	/// position seen for it (fed by RokuMonitor's polling). The guided
 	/// sequence checks these before sending anything, so re-tapping Play
-	/// on the episode Sam is already watching can never restart it.
+	/// on the episode the user is already watching can never restart it.
 	/// PER UNIVERSE (Decision 1C): these delegate to the active
 	/// universe's data — "already watching episode X" is a fact about
 	/// one universe's watch order, never another's.</summary>
@@ -292,7 +292,7 @@ public class Store
 	}
 
 	/// <summary>Autoplay: when the TV shows the current episode has
-	/// finished, auto-advance and play the next one. Default ON; Sam's
+	/// finished, auto-advance and play the next one. Default ON; the user's
 	/// choice persists. (Stored as bool? in the state file so a state
 	/// file written before this setting existed still defaults ON.)</summary>
 	public bool AutoplayEnabled { get; private set; } = true;
@@ -327,7 +327,7 @@ public class Store
 
 	public int AutoplayCountdownSeconds { get; private set; } = DefaultCountdownSeconds;
 
-	/// <summary>Id of the app theme Sam picked in Settings (see
+	/// <summary>Id of the app theme the user picked in Settings (see
 	/// ThemeService). Default "light" (Light Basic — the original
 	/// shipping look). Stored as a plain string; unknown ids fall back
 	/// to Light Basic when applied.</summary>
@@ -339,18 +339,47 @@ public class Store
 
 	/// <summary>Whether the guided Play sequence sends the profile-pick
 	/// Select after a cold Prime launch. Default TRUE = the shipped
-	/// behaviour (Sam's TV asks for a profile). OFF skips only that one
+	/// behaviour (the test TV asks for a profile). OFF skips only that one
 	/// keypress; every other step is identical.</summary>
 	public bool ProfileSelectEnabled { get; private set; } = true;
 
+	// ---- Settings page groups (v2.3.0). The Settings page is
+	// ---- five collapsible groups; the Store owns only the ids
+	// ---- and the persisted open-set — the page owns the layout.
+
+	/// <summary>The Settings page's group ids, in page order.
+	/// The page renders one collapsible group per id.</summary>
+	public const string SettingsGroupTv = "tv";
+	public const string SettingsGroupUniverses = "universes";
+	public const string SettingsGroupPlayback = "playback";
+	public const string SettingsGroupAppearance = "appearance";
+	public const string SettingsGroupSetup = "setup";
+	public static readonly string[] SettingsGroups =
+		{ SettingsGroupTv, SettingsGroupUniverses, SettingsGroupPlayback, SettingsGroupAppearance, SettingsGroupSetup };
+
+	private readonly HashSet<string> _openSettingsGroups = new() { SettingsGroupTv };
+
+	/// <summary>Whether a Settings group is currently expanded.
+	/// Default: TV only — the page opens on the TV controls with
+	/// every other group collapsed. The set is stored as a list
+	/// in the state file so the page looks the way the user left it;
+	/// a state file predating the field (null) falls back to the
+	/// TV-only default, while an explicitly empty list is
+	/// honoured — he closed them all. Unknown ids (a newer
+	/// build's groups in an older build's hands) are dropped.</summary>
+	public bool IsSettingsGroupOpen(string groupId) => _openSettingsGroups.Contains(groupId);
+
 	/// <summary>How completion detection treats the credits:
-	/// "balanced" (default) = the shipped thresholds exactly (≥92% of
-	/// listed runtime, or end-of-playback after ≥65%); "credits" = only
-	/// the end-of-playback signal (after ≥65%) counts; "early" = ≥85%
-	/// of listed runtime counts, end-of-playback rule unchanged.</summary>
+	/// "balanced" (default) = the episode counts as finished when
+	/// the position reaches its listed end — the credits start —
+	/// or on end-of-playback after ≥65%; "credits" = only the
+	/// end-of-playback signal (after ≥65%) counts. The iteration-3
+	/// "early" mode was removed in v2.3.1 (the project ruling): it is
+	/// no longer a valid value anywhere, so a state file or backup
+	/// still carrying "early" loads as "balanced" — the setting
+	/// migrates, nothing else is touched.</summary>
 	public const string CreditsBalanced = "balanced";
 	public const string CreditsLetPlay = "credits";
-	public const string CreditsEarly = "early";
 	public string CreditsThreshold { get; private set; } = CreditsBalanced;
 
 	/// <summary>Spoiler guard: hide descriptions of unwatched episodes
@@ -369,7 +398,7 @@ public class Store
 	/// <summary>Background mode: the Android foreground service keeps
 	/// the TV monitor, completion detection and autoplay running while
 	/// the app isn't on screen, behind a persistent notification.
-	/// Default TRUE — the feature is Sam's explicit request, not a
+	/// Default TRUE — the feature is an explicit project requirement, not a
 	/// behaviour-preserving iteration-3-style addition. Stored nullable
 	/// so older state files default ON.</summary>
 	public bool BackgroundModeEnabled { get; private set; } = true;
@@ -486,7 +515,7 @@ public class Store
 		if (save) SaveSettings();
 	}
 
-	// ---- My Services (Sam's ruling, 2026-11-04) ----------------
+	// ---- My Services (the project ruling, 2026-11-04) ----------------
 	// Which of the three streaming services the user actually
 	// HAS, picked in setup and mirrored in Settings. Global state
 	// like the TV address — a fact about the household, not a
@@ -632,6 +661,12 @@ public class Store
 		public int? AutoplaySessionLimit { get; set; }
 		public bool? BackgroundModeEnabled { get; set; }
 		public bool? NotificationPromptDone { get; set; }
+		/// <summary>The Settings page groups left expanded
+		/// (v2.3.0). Null in state files written before the
+		/// grouping existed → the TV-only default; an empty
+		/// list is honoured as "all closed" — the two must
+		/// never blur (the My Services rule).</summary>
+		public List<string>? SettingsOpenGroups { get; set; }
 	}
 
 	/// <summary>One installed pack's registry entry in the state
@@ -722,7 +757,7 @@ public class Store
 	private void ApplyOptionalSettings(StateFile state)
 	{
 		ProfileSelectEnabled = state.ProfileSelectEnabled ?? true;
-		CreditsThreshold = state.CreditsThreshold is CreditsBalanced or CreditsLetPlay or CreditsEarly
+		CreditsThreshold = state.CreditsThreshold is CreditsBalanced or CreditsLetPlay
 			? state.CreditsThreshold
 			: CreditsBalanced;
 		SpoilerGuardEnabled = state.SpoilerGuardEnabled ?? false;
@@ -731,6 +766,19 @@ public class Store
 			: 0;
 		BackgroundModeEnabled = state.BackgroundModeEnabled ?? true;
 		NotificationPromptDone = state.NotificationPromptDone ?? false;
+		// Settings groups (v2.3.0): adopt the saved open-set,
+		// dropping ids this build doesn't render; a file that
+		// predates the field gets the TV-only default.
+		_openSettingsGroups.Clear();
+		if (state.SettingsOpenGroups != null)
+		{
+			foreach (var g in state.SettingsOpenGroups)
+				if (SettingsGroups.Contains(g)) _openSettingsGroups.Add(g);
+		}
+		else
+		{
+			_openSettingsGroups.Add(SettingsGroupTv);
+		}
 	}
 
 	private static DateTimeOffset? ParseTimestamp(string? s) =>
@@ -956,7 +1004,7 @@ public class Store
 	/// those builds knew — and are adopted untouched: nothing
 	/// watched, saved, or configured is lost or reset.
 	///
-	/// MIGRATION (v2.1.0, Sam's upgrade guarantee): a state file
+	/// MIGRATION (v2.1.0, the upgrade guarantee): a state file
 	/// with no InstalledPacks registry predates downloadable
 	/// packs — its universes shipped inside the old app, so
 	/// nothing is registered for it here. Its wanted universes
@@ -1219,6 +1267,14 @@ public class Store
 			AutoplaySessionLimit = AutoplaySessionLimit,
 			BackgroundModeEnabled = BackgroundModeEnabled,
 			NotificationPromptDone = NotificationPromptDone,
+			// Always written, even when empty: null means
+			// "predates the grouping" (TV-only default), an
+			// empty list means the user closed every group — the
+			// two must never blur (the My Services rule).
+			// Page order keeps the file stable.
+			SettingsOpenGroups = SettingsGroups
+				.Where(g => _openSettingsGroups.Contains(g))
+				.ToList(),
 		};
 		Directory.CreateDirectory(FileSystem.AppDataDirectory);
 		File.WriteAllText(StatePath, JsonSerializer.Serialize(state));
@@ -1284,7 +1340,7 @@ public class Store
 		SaveSettings();
 	}
 
-	/// <summary>Sam's hand-saved Prime ID override for an episode
+	/// <summary>the user's hand-saved Prime ID override for an episode
 	/// identity, if one exists (used by the data refresh to judge ID
 	/// coverage the way the app actually experiences it).</summary>
 	public string? GetPrimeOverride(string key) => GetLinkOverride(key, PlatformCatalog.PrimeSignifier);
@@ -1363,7 +1419,7 @@ public class Store
 
 	/// <summary>The platforms an episode could be playing on, for
 	/// attributing TV playback to it: the platforms of its
-	/// effective links — or, for a tracker-only episode Sam may
+	/// effective links — or, for a tracker-only episode the user may
 	/// still start by hand on the TV, Prime only (exactly the
 	/// pre-1G attribution). When the app itself last started THIS
 	/// episode, its recorded platform outranks the list.</summary>
@@ -1892,9 +1948,21 @@ public class Store
 		SaveSettings();
 	}
 
+	/// <summary>Expand or collapse one Settings page group
+	/// (v2.3.0). Unknown ids are ignored; a call that changes
+	/// nothing doesn't rewrite the state file.</summary>
+	public void SetSettingsGroupOpen(string groupId, bool open)
+	{
+		if (!SettingsGroups.Contains(groupId)) return;
+		bool changed = open
+			? _openSettingsGroups.Add(groupId)
+			: _openSettingsGroups.Remove(groupId);
+		if (changed) SaveSettings();
+	}
+
 	public void SetCreditsThreshold(string mode)
 	{
-		CreditsThreshold = mode is CreditsBalanced or CreditsLetPlay or CreditsEarly ? mode : CreditsBalanced;
+		CreditsThreshold = mode is CreditsBalanced or CreditsLetPlay ? mode : CreditsBalanced;
 		SaveSettings();
 	}
 
@@ -1917,7 +1985,7 @@ public class Store
 	}
 
 	/// <summary>Record that the one-time notifications-permission
-	/// prompt has been shown, whatever Sam chose — it never nags
+	/// prompt has been shown, whatever the user chose — it never nags
 	/// twice. Settings keeps showing the permission state regardless.</summary>
 	public void MarkNotificationPromptDone()
 	{
@@ -2070,9 +2138,10 @@ public class Store
 				ThemeId = themeVal;
 			if (s.TryGetProperty("profileSelectEnabled", out var prof) && (prof.ValueKind is JsonValueKind.True or JsonValueKind.False))
 				ProfileSelectEnabled = prof.GetBoolean();
-			if (s.TryGetProperty("creditsThreshold", out var credits) && credits.ValueKind == JsonValueKind.String
-				&& credits.GetString() is CreditsBalanced or CreditsLetPlay or CreditsEarly)
-				CreditsThreshold = credits.GetString()!;
+			if (s.TryGetProperty("creditsThreshold", out var credits) && credits.ValueKind == JsonValueKind.String)
+				CreditsThreshold = credits.GetString() is CreditsBalanced or CreditsLetPlay
+					? credits.GetString()!
+					: CreditsBalanced;
 			if (s.TryGetProperty("spoilerGuardEnabled", out var spoiler) && (spoiler.ValueKind is JsonValueKind.True or JsonValueKind.False))
 				SpoilerGuardEnabled = spoiler.GetBoolean();
 			if (s.TryGetProperty("autoplaySessionLimit", out var limit) && limit.ValueKind == JsonValueKind.Number
@@ -2207,6 +2276,10 @@ public class Store
 		AutoplaySessionLimit = 0;
 		BackgroundModeEnabled = true;
 		NotificationPromptDone = false;
+		// Settings groups back to the first-install default:
+		// TV expanded, everything else collapsed.
+		_openSettingsGroups.Clear();
+		_openSettingsGroups.Add(SettingsGroupTv);
 		// A first install has not done setup — start-over returns to
 		// exactly that state (Decision 7).
 		SetupCompleted = false;

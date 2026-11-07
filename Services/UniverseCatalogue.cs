@@ -9,7 +9,7 @@ namespace OneChicago.Services;
 /// catalogue and the dataset files knows any universe's
 /// specifics.
 ///
-/// Since v2.1.0 (Decision 1J + Sam's rulings of 2026-11-04) a
+/// Since v2.1.0 (Decision 1J + the project rulings of 2026-11-04) a
 /// UniverseInfo is NEVER written in code: every pack declares
 /// this metadata in its own dataset envelope (see DatasetFile)
 /// and is registered from that declaration — the packs that once
@@ -58,7 +58,7 @@ public sealed class UniverseInfo
 /// from the packs' own self-describing envelopes by the Store
 /// (at startup from the installed-pack registry, and at install
 /// time when a pack downloads). Empty on a fresh install, by
-/// design (Sam's ruling, 2026-11-04): setup's first step is
+/// design (the project ruling, 2026-11-04): setup's first step is
 /// choosing which packs to download.
 ///
 /// The registry list itself is internal (not private) for
